@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 
-from whichllm.constants import _GiB
+from whichllm.constants import GPU_BANDWIDTH, _GiB
 from whichllm.hardware.types import GPUInfo
 
 logger = logging.getLogger(__name__)
@@ -33,6 +33,51 @@ _COMMON_GPU_ALIASES: dict[str, list[str]] = {
         "NVIDIA H100 SXM5 80 GB",
     ],
 }
+
+# Apple Silicon chips. dbgpu does not include these (it tracks discrete GPUs
+# via TechPowerUp), but users routinely simulate with --gpu "M2 Max" etc.
+# Without this short-circuit, "M1" fuzzy-matches the 1997 ATI Rage Mobility-M1
+# and "M3 Max" falls through to vendor=nvidia default.
+# Format: chip_name -> (canonical_name, default_unified_memory_gb).
+# --vram override is still respected; the default is the most common SKU.
+_APPLE_SILICON_CHIPS: dict[str, tuple[str, float]] = {
+    "M1": ("Apple M1", 8.0),
+    "M1 Pro": ("Apple M1 Pro", 16.0),
+    "M1 Max": ("Apple M1 Max", 32.0),
+    "M1 Ultra": ("Apple M1 Ultra", 64.0),
+    "M2": ("Apple M2", 16.0),
+    "M2 Pro": ("Apple M2 Pro", 16.0),
+    "M2 Max": ("Apple M2 Max", 32.0),
+    "M2 Ultra": ("Apple M2 Ultra", 64.0),
+    "M3": ("Apple M3", 16.0),
+    "M3 Pro": ("Apple M3 Pro", 18.0),
+    "M3 Max": ("Apple M3 Max", 36.0),
+    "M3 Ultra": ("Apple M3 Ultra", 96.0),
+    "M4": ("Apple M4", 16.0),
+    "M4 Pro": ("Apple M4 Pro", 24.0),
+    "M4 Max": ("Apple M4 Max", 36.0),
+    "M4 Ultra": ("Apple M4 Ultra", 64.0),
+}
+
+
+def _lookup_apple_silicon(
+    name: str,
+) -> tuple[str, str, float, float] | None:
+    """Match Apple Silicon chip names. Returns (canonical_name, vendor,
+    default_vram_gb, bandwidth_gbps) or None.
+
+    Matches are case-insensitive and accept both "M2 Max" and "m2max" forms.
+    Longest match wins so "M2 Ultra" does not get caught by the "M2" entry.
+    """
+    compact = re.sub(r"\s+", "", name).lower()
+    # Sort keys by length descending so "M2 Ultra" wins over "M2".
+    for key in sorted(_APPLE_SILICON_CHIPS, key=len, reverse=True):
+        key_compact = re.sub(r"\s+", "", key).lower()
+        if compact == key_compact:
+            canonical, default_vram = _APPLE_SILICON_CHIPS[key]
+            bandwidth = GPU_BANDWIDTH.get(key, 100.0)
+            return canonical, "apple", default_vram, bandwidth
+    return None
 
 
 def _normalize_gpu_name(name: str) -> str:
@@ -137,6 +182,22 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
         ValueError: If GPU is not found and no vram_override_gb given.
     """
     _last_suggestions.clear()
+
+    # Apple Silicon short-circuit: dbgpu has no Apple entries, so we check
+    # first to avoid fuzzy-matching "M1" against "Rage Mobility-M1".
+    apple_hit = _lookup_apple_silicon(name)
+    if apple_hit is not None:
+        canonical, vendor, default_vram_gb, bandwidth = apple_hit
+        vram_gb = (
+            vram_override_gb if vram_override_gb is not None else default_vram_gb
+        )
+        return GPUInfo(
+            name=f"{canonical} (simulated)",
+            vendor=vendor,
+            vram_bytes=int(vram_gb * _GiB),
+            memory_bandwidth_gbps=bandwidth,
+        )
+
     spec = _lookup_dbgpu(name)
 
     # VRAM
