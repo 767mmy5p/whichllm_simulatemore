@@ -65,8 +65,9 @@ discrete GPU.
 ## Intel
 
 Intel integrated GPUs are detected on Linux through `lspci` or sysfs. They do
-not normally report dedicated VRAM, so whichllm treats them as shared-memory
-graphics.
+not normally report dedicated VRAM, so whichllm records them with `0` dedicated
+VRAM. The hardware display labels that as shared memory, but compatibility
+checks still treat the device as having no dedicated GPU memory.
 
 The Intel backend factor is lower than NVIDIA, AMD, and Apple because local LLM
 GPU inference support is less mature.

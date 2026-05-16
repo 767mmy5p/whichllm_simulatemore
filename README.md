@@ -274,7 +274,7 @@ trust, and popularity as adjustments.
 Score markers:
 - **`~`** (yellow) — No direct benchmark; score inherited/interpolated from the model family
 - **`!sr`** (bright yellow) — Uploader-reported benchmark only, not independently verified
-- **`?`** (yellow) — No benchmark data available
+- **`?`** (red) — No benchmark data available
 
 ## Documentation
 
