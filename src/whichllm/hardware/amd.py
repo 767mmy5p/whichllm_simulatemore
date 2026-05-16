@@ -66,6 +66,19 @@ def _normalize_lspci_name(line: str) -> str:
     return "AMD Graphics"
 
 
+_AMD_VENDOR_MARKERS = (
+    "advanced micro devices",
+    "amd/ati",
+    "[amd]",
+    "[ati]",
+    "ati technologies",
+)
+
+
+def _line_has_amd_vendor(line_lower: str) -> bool:
+    return any(marker in line_lower for marker in _AMD_VENDOR_MARKERS)
+
+
 def _detect_from_lspci() -> list[str]:
     try:
         result = subprocess.run(
@@ -85,7 +98,7 @@ def _detect_from_lspci() -> list[str]:
     seen: set[str] = set()
     for line in result.stdout.splitlines():
         line_lower = line.lower()
-        if not any(vendor in line_lower for vendor in ("amd", "ati")):
+        if not _line_has_amd_vendor(line_lower):
             continue
         if not any(display_class in line_lower for display_class in _DISPLAY_CLASSES):
             continue
