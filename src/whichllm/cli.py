@@ -944,7 +944,7 @@ def run(
             )
             console.print(
                 "[dim]Try specifying a GGUF model explicitly, for example "
-                "`whichllm run \"qwen gguf\"`.[/]"
+                '`whichllm run "qwen gguf"`.[/]'
             )
             raise typer.Exit(code=1)
 

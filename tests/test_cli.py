@@ -430,7 +430,9 @@ def test_resolve_ranked_synthetic_gguf_without_real_repo_returns_none():
         file_size_bytes=16_000_000_000,
     )
 
-    assert _resolve_ranked_gguf_for_run(selected, synthetic, [selected, unrelated]) is None
+    assert (
+        _resolve_ranked_gguf_for_run(selected, synthetic, [selected, unrelated]) is None
+    )
 
 
 def test_resolve_ranked_synthetic_gguf_rejects_size_mismatch():
@@ -547,7 +549,9 @@ def test_run_auto_pick_resolves_ranked_gguf_before_launch(monkeypatch):
 
     monkeypatch.setattr("shutil.which", lambda _: "/usr/bin/uv")
     monkeypatch.setattr(cli_mod, "_load_models", lambda refresh: [selected, real_gguf])
-    monkeypatch.setattr("whichllm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8))
+    monkeypatch.setattr(
+        "whichllm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8)
+    )
     monkeypatch.setattr("whichllm.models.benchmark.load_benchmark_cache", lambda: {})
     monkeypatch.setattr("whichllm.engine.ranker.rank_models", fake_rank_models)
     monkeypatch.setattr(cli_mod, "_generate_chat_script", fake_generate_chat_script)
