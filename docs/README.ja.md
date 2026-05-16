@@ -1,19 +1,36 @@
 # whichllm
 
-**あなたのPCで動く最強のローカルLLMを見つけるCLIツール。**
+**手元のハードウェアで実際に動くローカルLLMを探すCLIです。**
 
-GPU/CPU/RAMを自動検出し、HuggingFaceの人気モデルからハードウェアに合った最適なモデルをランキング表示します。
+whichllm は GPU / CPU / RAM / ディスクを検出し、HuggingFace 上のモデルを
+取得して、実行できる候補をランキングします。単に「VRAMに入る最大モデル」を
+選ぶのではなく、ベンチマーク、量子化、速度、実行形態、モデル世代をまとめて
+評価します。
 
 [English version](../README.md)
 
-![demo](../assets/demo.png)
+![demo](../assets/demo.gif)
 
 ## インストール
 
-### pipx (推奨)
+### uv
+
+一度だけ試す場合:
 
 ```bash
-pipx install whichllm
+uvx whichllm
+```
+
+継続して使う場合:
+
+```bash
+uv tool install whichllm
+```
+
+### Homebrew
+
+```bash
+brew install andyyyy64/whichllm/whichllm
 ```
 
 ### pip
@@ -29,34 +46,55 @@ git clone https://github.com/Andyyyy64/whichllm.git
 cd whichllm
 uv sync --dev
 uv run whichllm
+uv run pytest
 ```
 
-## 使い方
+## まず使う
 
 ```bash
-# 自動検出して最適なモデルを表示
+# 自動検出しておすすめモデルを表示
 whichllm
 
-# GPU をシミュレート (購入検討時など)
+# GPUをシミュレートする
 whichllm --gpu "RTX 4090"
-whichllm --gpu "RTX 5090"
+whichllm --gpu "Apple M3 Max"
 
-# CPU のみモードで実行
+# CPUのみとして評価する
 whichllm --cpu-only
 
-# 結果を増やす / フィルタ
+# JSONで出力する
+whichllm --json
+```
+
+## 主なコマンド
+
+```bash
+# 推薦ランキング
 whichllm --top 20
 whichllm --quant Q4_K_M
 whichllm --min-speed 30
-whichllm --evidence base   # id一致 + base_model一致まで許可
-whichllm --evidence strict # id完全一致のみ（--direct と同じ）
+whichllm --profile coding
+whichllm --status
+
+# ベンチ根拠の厳しさ
+whichllm --evidence strict
+whichllm --evidence base
 whichllm --direct
 
-# JSON 出力
-whichllm --json
+# モデルから必要GPUを逆算
+whichllm plan "llama 3 70b"
+whichllm plan "Qwen2.5-72B" --quant Q8_0
+whichllm plan "mistral 7b" --context-length 32768
 
-# キャッシュを無視して再取得
-whichllm --refresh
+# 今のマシンと購入候補GPUを比較
+whichllm upgrade "RTX 4090" "RTX 5090" "H100"
+
+# モデルをダウンロードしてチャット
+whichllm run "qwen 2.5 1.5b gguf"
+whichllm run
+
+# 実行用Pythonコードを表示
+whichllm snippet "qwen 7b"
 
 # ハードウェア情報だけ表示
 whichllm hardware
@@ -64,64 +102,71 @@ whichllm hardware
 
 ## スコアの見方
 
-各モデルに 0〜100 のスコアが付きます。
+各モデルには 0 から 100 のスコアが付きます。中心になるのはベンチマークと
+モデルサイズですが、実行時に遅すぎる候補や、CPUオフロードが大きい候補は
+下がります。
 
-| 要素 | 配点 | 説明 |
-|------|------|------|
-| モデルサイズ | 0-40 | パラメータ数が大きいほど高品質 |
-| ベンチマーク | 0-10 | Arena ELO / Open LLM Leaderboard のスコア |
-| 推論速度 | 0-20 | tok/s が高いほど実用的 |
-| ソース信頼度 | -5〜+5 | 公式 org はボーナス、リパッケージはペナルティ |
-| 人気度 | 0-3 | ダウンロード数・いいね数 |
+| 要素 | 役割 |
+| --- | --- |
+| ベンチマーク | LiveBench、Artificial Analysis、Aider、Vision、Arena、Open LLM Leaderboard を統合 |
+| モデルサイズ | 知識量の近似。MoEは総パラメータを使う |
+| 量子化 | Q4 / Q5 / Q6 / Q8 などの品質低下を反映 |
+| 実行形態 | Full GPU、Partial Offload、CPU-only を区別 |
+| 速度 | tok/s が実用ラインを下回ると減点 |
+| 根拠の強さ | direct、base_model、variant、line_interp、self_reported を区別 |
+| 世代補正 | 古い凍結ベンチだけで新世代を上回らないよう調整 |
 
 スコア横のマーカー:
-- **`~`** (黄色) — ベンチマークがまだ公開されていない新しいモデル。同シリーズの推定値を使用
-- **`?`** (黄色) — ベンチマークデータなし
+
+- `~`: 直接ベンチではなく、系列や派生から推定したスコア
+- `!sr`: アップローダー自己申告の評価値だけに基づくスコア
+- `?`: 利用できるベンチマーク根拠がないスコア
 
 ## 仕組み
 
-### データ取得
+1. ハードウェアを検出します。NVIDIA、AMD、Intel、Apple Silicon、CPU、RAM、
+   ディスク空き容量を見ます。
+2. HuggingFace APIからモデルを取得します。人気モデル、GGUF、最近更新された
+   GGUF、trending、重要な frontier モデルを組み合わせます。
+3. ベンチマークを読み込みます。現在系の LiveBench / Artificial Analysis /
+   Aider / Vision と、凍結系の Arena / Open LLM Leaderboard を分けて扱います。
+4. `base_model` とモデル名からファミリーを作り、同じモデルの派生やGGUFを束ねます。
+5. 候補ごとに VRAM、互換性、速度、スコアを計算します。
+6. ファミリーごとに最も良い候補を残して表示します。
 
-1. **HuggingFace API** から人気テキスト生成モデル + GGUF + マルチモーダルを取得 (計 ~900 モデル)
-2. **Chatbot Arena ELO** と **Open LLM Leaderboard** からベンチマークスコアを取得・正規化
-3. 24時間キャッシュ (`~/.cache/whichllm/`)
+キャッシュは `~/.cache/whichllm/` に保存されます。
 
-### ランキングエンジン
+- `models.json`: 6時間
+- `benchmark.json`: 24時間
 
-1. **ハードウェア検出** — GPU (NVIDIA/AMD/Apple), CPU, RAM, ディスクを自動検出
-2. **VRAM 見積もり** — モデルサイズ + 量子化 + KV キャッシュから必要 VRAM を計算
-3. **互換性チェック** — Full GPU / Partial Offload / CPU-only の判定
-4. **推論速度推定** — GPU メモリ帯域幅ベースの tok/s 推定
-5. **スコア計算** — サイズ、ベンチマーク、速度、信頼度を総合評価
-6. **ファミリー重複排除** — 同じモデルの GGUF バリアントやバージョン違いを統合
+## プロジェクト構成
 
-### プロジェクト構成
-
-```
+```text
 src/whichllm/
-├── cli.py              # typer CLI エントリポイント
-├── constants.py        # GPU 帯域幅テーブル、量子化定数
-├── hardware/           # ハードウェア検出 (NVIDIA, AMD, Apple, CPU, RAM)
-│   └── gpu_simulator.py  # --gpu フラグ用 GPU シミュレータ
-├── models/
-│   ├── fetcher.py      # HuggingFace API からモデル取得
-│   ├── benchmark.py    # ベンチマークスコア取得 (Arena + Leaderboard)
-│   ├── grouper.py      # モデルファミリー分類・重複排除
-│   └── cache.py        # JSON キャッシュ
-├── engine/
-│   ├── vram.py         # VRAM 必要量の推定
-│   ├── compatibility.py # ハードウェア互換性チェック
-│   ├── performance.py  # 推論速度推定
-│   └── ranker.py       # スコア計算・ランキング
-└── output/
-    └── display.py      # Rich テーブル表示
+├── cli.py              # Typer CLI: main, plan, upgrade, run, snippet, hardware
+├── constants.py        # GPU帯域、量子化、世代補正、compute capability
+├── hardware/           # ハードウェア検出とGPUシミュレーション
+├── models/             # HuggingFace取得、ベンチ、キャッシュ、グルーピング
+├── engine/             # VRAM、互換性、速度、ランキング
+└── output/             # Rich表示、JSON、plan/upgrade表示
 ```
+
+## 詳細ドキュメント
+
+- [CLIリファレンス](cli.md)
+- [仕組み](how-it-works.md)
+- [スコアリング](scoring.md)
+- [ハードウェア検出とシミュレーション](hardware.md)
+- [run と snippet](run-snippet.md)
+- [トラブルシュート](troubleshooting.md)
 
 ## 動作環境
 
 - Python 3.11+
-- NVIDIA GPU 検出は `nvidia-ml-py` で自動対応（デフォルトで同梱）
-- AMD / Apple Silicon は自動検出
+- NVIDIA GPU検出は `nvidia-ml-py` と `nvidia-smi` fallback
+- AMD GPU検出は Linux / ROCm / sysfs / lspci
+- Intel iGPU検出は Linux / sysfs / lspci
+- Apple Silicon検出は macOS / `system_profiler`
 
 ## ライセンス
 
