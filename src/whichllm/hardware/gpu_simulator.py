@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 
-from whichllm.constants import GPU_BANDWIDTH, _GiB
+from whichllm.constants import AMD_SHARED_MEMORY_APU_MARKERS, GPU_BANDWIDTH, _GiB
 from whichllm.hardware.types import GPUInfo
 
 logger = logging.getLogger(__name__)
@@ -81,6 +81,19 @@ def _lookup_apple_silicon(
             canonical, default_vram = _APPLE_SILICON_CHIPS[key]
             bandwidth = GPU_BANDWIDTH.get(key, 100.0)
             return canonical, "apple", default_vram, bandwidth
+    return None
+
+
+def _is_amd_shared_memory_apu(name: str) -> bool:
+    name_upper = name.upper()
+    return any(marker in name_upper for marker in AMD_SHARED_MEMORY_APU_MARKERS)
+
+
+def _lookup_static_bandwidth(name: str) -> float | None:
+    name_upper = name.upper()
+    for key in sorted(GPU_BANDWIDTH, key=len, reverse=True):
+        if key.upper() in name_upper:
+            return GPU_BANDWIDTH[key]
     return None
 
 
@@ -187,6 +200,8 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
     """
     _last_suggestions.clear()
 
+    amd_shared_memory_apu = _is_amd_shared_memory_apu(name)
+
     # Apple Silicon short-circuit: dbgpu has no Apple entries, so we check
     # first to avoid fuzzy-matching "M1" against "Rage Mobility-M1".
     apple_hit = _lookup_apple_silicon(name)
@@ -219,6 +234,8 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
     bandwidth: float | None = None
     if spec is not None and spec.memory_bandwidth_gb_s:
         bandwidth = spec.memory_bandwidth_gb_s
+    if bandwidth is None:
+        bandwidth = _lookup_static_bandwidth(name)
 
     # Compute capability (CUDA version in dbgpu = compute capability)
     compute_cap: tuple[int, int] | None = None
@@ -229,6 +246,8 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
     vendor = "nvidia"
     if spec is not None:
         vendor = _MANUFACTURER_TO_VENDOR.get(spec.manufacturer, "nvidia")
+    elif amd_shared_memory_apu:
+        vendor = "amd"
 
     display_name = spec.name if spec is not None else name
 
@@ -238,4 +257,5 @@ def create_synthetic_gpu(name: str, vram_override_gb: float | None = None) -> GP
         vram_bytes=vram_bytes,
         compute_capability=compute_cap,
         memory_bandwidth_gbps=bandwidth,
+        shared_memory=amd_shared_memory_apu,
     )

@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+from whichllm.constants import _GiB
 from whichllm.constants import MIN_COMPUTE_CAPABILITY_OLLAMA
 from whichllm.engine.quantization import estimate_weight_bytes
 from whichllm.engine.types import CompatibilityResult
 from whichllm.engine.vram import estimate_vram
 from whichllm.hardware.types import GPUInfo, HardwareInfo
 from whichllm.models.types import GGUFVariant, ModelInfo
+
+
+def _gpu_available_memory(gpu: GPUInfo, usable_ram: int) -> int:
+    if gpu.shared_memory and gpu.vram_bytes < 2 * _GiB:
+        return usable_ram
+    return gpu.vram_bytes
 
 
 def check_compatibility(
@@ -21,15 +28,22 @@ def check_compatibility(
 
     vram_required = estimate_vram(model, variant, context_length)
 
+    # Reserve 20% of RAM for OS and other processes
+    usable_ram = int(hardware.ram_bytes * 0.80)
+
     # Determine best GPU
     best_gpu: GPUInfo | None = None
+    best_gpu_available = 0
     total_vram = 0
     for gpu in hardware.gpus:
-        total_vram += gpu.vram_bytes
-        if best_gpu is None or gpu.vram_bytes > best_gpu.vram_bytes:
+        gpu_available = _gpu_available_memory(gpu, usable_ram)
+        total_vram += gpu_available
+        if best_gpu is None or gpu_available > best_gpu_available:
             best_gpu = gpu
+            best_gpu_available = gpu_available
 
     vram_available = total_vram if total_vram > 0 else 0
+    offload_ram_available = 0 if best_gpu and best_gpu.shared_memory else usable_ram
 
     # Check compute capability for NVIDIA
     if best_gpu and best_gpu.vendor == "nvidia" and best_gpu.compute_capability:
@@ -47,14 +61,13 @@ def check_compatibility(
     if best_gpu and best_gpu.vendor == "apple" and hardware.os != "darwin":
         warnings.append("Metal requires macOS for Apple Silicon inference")
 
-    # Reserve 20% of RAM for OS and other processes
-    usable_ram = int(hardware.ram_bytes * 0.80)
-
     # Determine fit type
     if vram_available >= vram_required:
         fit_type = "full_gpu"
         can_run = True
-    elif vram_available > 0 and (vram_available + usable_ram) >= vram_required:
+    elif (
+        vram_available > 0 and (vram_available + offload_ram_available) >= vram_required
+    ):
         fit_type = "partial_offload"
         can_run = True
         offload_pct = (
@@ -62,7 +75,12 @@ def check_compatibility(
             if vram_required > 0
             else 0
         )
-        warnings.append(f"~{offload_pct:.0f}% of layers will be offloaded to CPU RAM")
+        if best_gpu and best_gpu.shared_memory:
+            warnings.append("Will use shared system memory")
+        else:
+            warnings.append(
+                f"~{offload_pct:.0f}% of layers will be offloaded to CPU RAM"
+            )
     elif usable_ram >= vram_required:
         fit_type = "cpu_only"
         can_run = True

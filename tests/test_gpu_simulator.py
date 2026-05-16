@@ -35,6 +35,13 @@ class TestKnownGPULookup:
         assert gpu.vendor == "amd"
         assert gpu.memory_bandwidth_gbps is not None
 
+    def test_amd_strix_halo_with_vram_override(self):
+        gpu = create_synthetic_gpu("Radeon 8060S", vram_override_gb=96)
+        assert gpu.vram_bytes == 96 * _GiB
+        assert gpu.vendor == "amd"
+        assert gpu.shared_memory is True
+        assert gpu.memory_bandwidth_gbps == 256.0
+
     def test_nvidia_gtx_1080(self):
         gpu = create_synthetic_gpu("GTX 1080")
         assert gpu.vram_bytes == 8 * _GiB

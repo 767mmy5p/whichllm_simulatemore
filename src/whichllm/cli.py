@@ -117,7 +117,11 @@ def _auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float 
         return None
     if not hardware.gpus:
         return 2.0  # CPU-only: tiny is the only practical choice
-    best_vram_gb = max(g.vram_bytes for g in hardware.gpus) / (1024**3)
+    usable_ram = int(hardware.ram_bytes * 0.80)
+    best_vram_gb = max(
+        (usable_ram if g.shared_memory and g.vram_bytes == 0 else g.vram_bytes)
+        for g in hardware.gpus
+    ) / (1024**3)
     if best_vram_gb >= 30:
         return 12.0
     if best_vram_gb >= 20:

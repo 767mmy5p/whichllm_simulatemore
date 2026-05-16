@@ -29,7 +29,47 @@ def test_detect_amd_gpu_from_lspci_when_rocm_smi_missing(monkeypatch):
     assert len(gpus) == 1
     assert gpus[0].vendor == "amd"
     assert gpus[0].vram_bytes == 0
+    assert gpus[0].shared_memory is True
+    assert gpus[0].memory_bandwidth_gbps == 256.0
     assert "Radeon 8060S" in gpus[0].name
+
+
+def test_detect_strix_halo_rocm_smi_does_not_treat_aperture_as_vram(monkeypatch):
+    def fake_run(args, **kwargs):
+        if args[:2] == ["rocm-smi", "--showproductname"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"card0": {"Card SKU": "STRXLGEN"}}',
+                stderr="",
+            )
+        if args[:3] == ["rocm-smi", "--showmeminfo", "vram"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"card0": {"VRAM Total Memory (B)": "536870912"}}',
+                stderr="",
+            )
+        if args[:2] == ["rocm-smi", "--showdriverversion"]:
+            return subprocess.CompletedProcess(
+                args,
+                0,
+                stdout='{"card0": {"Driver version": "7.0.3"}}',
+                stderr="",
+            )
+        raise AssertionError(args)
+
+    monkeypatch.setattr(amd.subprocess, "run", fake_run)
+
+    gpus = amd.detect_amd_gpus()
+
+    assert len(gpus) == 1
+    assert gpus[0].name == "STRXLGEN"
+    assert gpus[0].vendor == "amd"
+    assert gpus[0].shared_memory is True
+    assert gpus[0].vram_bytes == 0
+    assert gpus[0].rocm_version == "7.0.3"
+    assert gpus[0].memory_bandwidth_gbps == 256.0
 
 
 def test_detect_amd_gpu_from_sysfs_when_lspci_missing(monkeypatch, tmp_path):
@@ -49,6 +89,7 @@ def test_detect_amd_gpu_from_sysfs_when_lspci_missing(monkeypatch, tmp_path):
     assert gpus[0].vendor == "amd"
     assert gpus[0].name == "AMD Radeon RX 9060 XT"
     assert gpus[0].vram_bytes == 16 * 1024**3
+    assert gpus[0].shared_memory is False
 
 
 def test_display_amd_shared_memory_without_zero_kb(monkeypatch):
@@ -64,6 +105,7 @@ def test_display_amd_shared_memory_without_zero_kb(monkeypatch):
                     name="Strix Halo [Radeon 8060S]",
                     vendor="amd",
                     vram_bytes=0,
+                    shared_memory=True,
                 )
             ],
             cpu_name="CPU",
@@ -76,4 +118,5 @@ def test_display_amd_shared_memory_without_zero_kb(monkeypatch):
 
     output = buf.getvalue()
     assert "shared memory" in output
+    assert "256 GB/s" not in output
     assert "0 KB" not in output

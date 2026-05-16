@@ -64,6 +64,35 @@ def test_partial_offload():
     assert any("offload" in w.lower() for w in result.warnings)
 
 
+def test_shared_memory_amd_apu_uses_system_memory_pool():
+    model = _make_model(120_000_000_000)
+    variant = _make_variant(55_000_000_000)
+    hw = HardwareInfo(
+        gpus=[
+            GPUInfo(
+                name="STRXLGEN",
+                vendor="amd",
+                vram_bytes=512 * 1024**2,
+                memory_bandwidth_gbps=256.0,
+                shared_memory=True,
+            )
+        ],
+        cpu_name="AMD Ryzen AI MAX+ 395",
+        cpu_cores=16,
+        ram_bytes=128 * 1024**3,
+        disk_free_bytes=200 * 1024**3,
+        os="linux",
+    )
+
+    result = check_compatibility(model, variant, hw)
+
+    assert result.can_run is True
+    assert result.fit_type == "full_gpu"
+    assert result.vram_available_bytes == int(hw.ram_bytes * 0.80)
+    assert not any("offload" in w.lower() for w in result.warnings)
+    assert not any("cpu only" in w.lower() for w in result.warnings)
+
+
 def test_cpu_only():
     model = _make_model(1_000_000_000)
     variant = _make_variant(600_000_000)

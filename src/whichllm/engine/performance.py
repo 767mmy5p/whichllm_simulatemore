@@ -130,13 +130,15 @@ def estimate_tok_per_sec(
     #   and are read across PCIe at ~1/10th of VRAM bandwidth. With ~40%
     #   of the model offloaded the blended throughput lands near 0.45x.
     # - Apple Silicon: GPU and CPU share one physical unified-memory pool.
+    #   AMD shared-memory APUs such as Strix Halo have the same no-PCIe-cliff
+    #   shape for model weights, even though their backend factor remains AMD.
     #   "Exceeding VRAM" only means exceeding the recommended working set;
     #   the bytes are still read from the same high-bandwidth unified RAM,
     #   so there is no PCIe cliff — only mild OS/cache contention. Using
     #   the discrete 0.45x here was the bug that made DeepSeek-R1-class
     #   models on M2/M3 Ultra report ~1.7 t/s when real-world is 4-15.
     if fit_type == "partial_offload":
-        if gpu.vendor == "apple":
+        if gpu.vendor == "apple" or gpu.shared_memory:
             efficiency *= 0.85
         else:
             efficiency *= 0.45

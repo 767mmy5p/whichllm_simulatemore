@@ -7,7 +7,7 @@ import logging
 import subprocess
 from pathlib import Path
 
-from whichllm.constants import GPU_BANDWIDTH
+from whichllm.constants import AMD_SHARED_MEMORY_APU_MARKERS, GPU_BANDWIDTH, _GiB
 from whichllm.hardware.types import GPUInfo
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,34 @@ def _lookup_bandwidth(name: str) -> float | None:
         if key.upper() in name_upper:
             return GPU_BANDWIDTH[key]
     return None
+
+
+def _is_shared_memory_apu(name: str) -> bool:
+    name_upper = name.upper()
+    return any(marker in name_upper for marker in AMD_SHARED_MEMORY_APU_MARKERS)
+
+
+def _normalize_apu_vram(name: str, vram_bytes: int) -> int:
+    if _is_shared_memory_apu(name) and vram_bytes < 2 * _GiB:
+        return 0
+    return vram_bytes
+
+
+def _make_gpu(
+    name: str,
+    *,
+    vram_bytes: int = 0,
+    rocm_version: str | None = None,
+) -> GPUInfo:
+    shared_memory = _is_shared_memory_apu(name)
+    return GPUInfo(
+        name=name,
+        vendor="amd",
+        vram_bytes=_normalize_apu_vram(name, vram_bytes),
+        rocm_version=rocm_version,
+        memory_bandwidth_gbps=_lookup_bandwidth(name),
+        shared_memory=shared_memory,
+    )
 
 
 def _normalize_lspci_name(line: str) -> str:
@@ -109,29 +137,14 @@ def _detect_from_sysfs(drm_path: Path = Path("/sys/class/drm")) -> list[GPUInfo]
         if key in seen:
             continue
         seen.add(key)
-        gpus.append(
-            GPUInfo(
-                name=name,
-                vendor="amd",
-                vram_bytes=vram_bytes,
-                memory_bandwidth_gbps=_lookup_bandwidth(name),
-            )
-        )
+        gpus.append(_make_gpu(name, vram_bytes=vram_bytes))
     return gpus
 
 
 def _detect_amd_gpus_fallback() -> list[GPUInfo]:
     names = _detect_from_lspci()
     if names:
-        return [
-            GPUInfo(
-                name=name,
-                vendor="amd",
-                vram_bytes=0,
-                memory_bandwidth_gbps=_lookup_bandwidth(name),
-            )
-            for name in names
-        ]
+        return [_make_gpu(name) for name in names]
     return _detect_from_sysfs()
 
 
@@ -205,14 +218,6 @@ def detect_amd_gpus() -> list[GPUInfo]:
             except (ValueError, TypeError):
                 pass
 
-        gpus.append(
-            GPUInfo(
-                name=name,
-                vendor="amd",
-                vram_bytes=vram_total,
-                rocm_version=rocm_version,
-                memory_bandwidth_gbps=_lookup_bandwidth(name),
-            )
-        )
+        gpus.append(_make_gpu(name, vram_bytes=vram_total, rocm_version=rocm_version))
 
     return gpus

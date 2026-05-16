@@ -2,6 +2,14 @@
 
 _GiB = 1024**3
 
+AMD_SHARED_MEMORY_APU_MARKERS: tuple[str, ...] = (
+    "STRIX HALO",
+    "STRXLGEN",
+    "RADEON 8050S",
+    "RADEON 8060S",
+    "RYZEN AI MAX",
+)
+
 # GPU memory bandwidth in GB/s (theoretical peak)
 # Key: substring matched against GPU name (case-insensitive)
 GPU_BANDWIDTH: dict[str, float] = {
@@ -69,6 +77,13 @@ GPU_BANDWIDTH: dict[str, float] = {
     "RX 6800 XT": 512.0,
     "RX 6800": 512.0,
     "RX 6700 XT": 384.0,
+    # AMD APUs / shared-memory graphics
+    "Ryzen AI MAX+ 395": 256.0,
+    "Ryzen AI MAX 395": 256.0,
+    "Radeon 8060S": 256.0,
+    "Radeon 8050S": 256.0,
+    "Strix Halo": 256.0,
+    "STRXLGEN": 256.0,
     "MI300X": 5300.0,
     "MI250X": 3276.0,
     "MI210": 1638.0,
