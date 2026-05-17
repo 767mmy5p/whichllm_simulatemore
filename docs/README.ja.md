@@ -66,6 +66,10 @@ whichllm --cpu-only
 whichllm --json
 ```
 
+JSONの各モデルには `estimated_tok_per_sec` に加えて、
+`speed_confidence`、`speed_range_tok_per_sec`、`speed_notes` が入ります。
+速度は実測値ではなく、ハードウェア情報とモデル情報からの推定です。
+
 ## 主なコマンド
 
 ```bash
@@ -112,7 +116,7 @@ whichllm hardware
 | モデルサイズ | 知識量の近似。MoEは総パラメータを使う |
 | 量子化 | Q4 / Q5 / Q6 / Q8 などの品質低下を反映 |
 | 実行形態 | Full GPU、Partial Offload、CPU-only を区別 |
-| 速度 | tok/s が実用ラインを下回ると減点 |
+| 速度 | tok/s が実用ラインを下回ると減点。表示時は推定の信頼度と幅も出す |
 | 根拠の強さ | direct、base_model、variant、line_interp、self_reported を区別 |
 | 世代補正 | 古い凍結ベンチだけで新世代を上回らないよう調整 |
 
@@ -121,6 +125,11 @@ whichllm hardware
 - `~`: 直接ベンチではなく、系列や派生から推定したスコア
 - `!sr`: アップローダー自己申告の評価値だけに基づくスコア
 - `?`: 利用できるベンチマーク根拠がないスコア
+
+`--status` の速度欄のマーカー:
+
+- `~`: 速度推定の幅がある通常の推定値
+- `?`: backend や runtime の影響が大きい低信頼の推定値
 
 ## 仕組み
 
@@ -131,7 +140,7 @@ whichllm hardware
 3. ベンチマークを読み込みます。現在系の LiveBench / Artificial Analysis /
    Aider / Vision と、凍結系の Arena / Open LLM Leaderboard を分けて扱います。
 4. `base_model` とモデル名からファミリーを作り、同じモデルの派生やGGUFを束ねます。
-5. 候補ごとに VRAM、互換性、速度、スコアを計算します。
+5. 候補ごとに VRAM、互換性、速度、速度推定の信頼度、スコアを計算します。
 6. ファミリーごとに最も良い候補を残して表示します。
 
 キャッシュは `~/.cache/whichllm/` に保存されます。

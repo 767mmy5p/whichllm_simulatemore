@@ -227,6 +227,10 @@ whichllm snippet "qwen 7b"
 whichllm snippet "llama 3 8b gguf" --quant Q5_K_M
 ```
 
+JSON model rows include `estimated_tok_per_sec`, `speed_confidence`,
+`speed_range_tok_per_sec`, and `speed_notes`. The speed range is a planning
+range, not a live benchmark.
+
 ## Integrations
 
 ### Ollama
@@ -267,7 +271,7 @@ trust, and popularity as adjustments.
 | Quantization | × penalty | Lower-bit quants discounted multiplicatively |
 | Evidence confidence | ×0.55–1.0 | none / self-reported ×0.55, inherited ×0.78, direct full |
 | Runtime fit | ×0.50–1.0 | partial-offload ×0.72, CPU-only ×0.50 |
-| Speed | -8 to +8 | Usability gate vs a fit-dependent tok/s floor |
+| Speed | -8 to +8 | Usability gate vs a fit-dependent tok/s floor; reported with confidence and range metadata |
 | Source trust | -5 to +5 | Official-org bonus, known-repackager penalty |
 | Popularity | tie-breaker | Downloads/likes; weight shrinks as evidence strengthens |
 
@@ -275,6 +279,10 @@ Score markers:
 - **`~`** (yellow) — No direct benchmark; score inherited/interpolated from the model family
 - **`!sr`** (bright yellow) — Uploader-reported benchmark only, not independently verified
 - **`?`** (red) — No benchmark data available
+
+Speed markers in `--status`:
+- **`~`** (yellow) — Estimated tok/s range is available
+- **`?`** (red) — Low-confidence speed estimate; backend/runtime sensitivity is high
 
 ## Documentation
 
@@ -317,7 +325,7 @@ Score markers:
 1. **Hardware detection** — NVIDIA (nvidia-ml-py), AMD (dbgpu/ROCm), Apple Silicon (Metal), CPU cores, RAM, disk
 2. **VRAM estimation** — Weights + KV cache + activation + framework overhead (~500MB)
 3. **Compatibility** — Full GPU / Partial Offload / CPU-only; compute capability and OS checks
-4. **Speed** — tok/s from GPU memory bandwidth lookup (constants.py)
+4. **Speed** — tok/s from GPU memory bandwidth, quantization, backend, fit type, and MoE active parameters
 5. **Scoring** — Benchmark (with confidence dampening), size, quantization penalty, fit type, speed, popularity, source trust (official vs repackager)
 6. **Backend filter** — Apple Silicon and CPU-only restrict to GGUF for stability; Linux+NVIDIA allows AWQ/GPTQ
 

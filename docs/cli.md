@@ -23,7 +23,7 @@ Common options:
 | `--profile` | Ranking profile: `general`, `coding`, `vision`, `math`, `any` |
 | `--evidence` | Benchmark evidence filter: `strict`, `base`, `any` |
 | `--direct` | Alias for `--evidence strict` |
-| `--status` | Show VRAM/RAM, speed, and fit columns instead of published/download columns |
+| `--status` | Show VRAM/RAM, speed, and fit columns instead of published/download columns. Speed may include `~` for estimated range or `?` for low confidence |
 | `--min-params` | Minimum model knowledge capacity in billions of parameters |
 | `--json` | Print machine-readable JSON |
 | `--refresh` | Ignore caches and fetch models/benchmarks again |
@@ -43,6 +43,15 @@ whichllm --evidence strict
 whichllm --status
 whichllm --json | jq '.models[0]'
 ```
+
+Ranking JSON model rows include:
+
+| Field | Meaning |
+| --- | --- |
+| `estimated_tok_per_sec` | Point estimate used by ranking |
+| `speed_confidence` | `high`, `medium`, or `low` |
+| `speed_range_tok_per_sec` | Estimated lower/upper tok/s range, when available |
+| `speed_notes` | Short reasons for the confidence level |
 
 ## `hardware`
 

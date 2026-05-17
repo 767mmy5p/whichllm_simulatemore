@@ -163,11 +163,19 @@ Speed is an estimate based on:
 Real performance depends on the inference runtime, driver, prompt length,
 batching, thermal limits, and background memory pressure.
 
-Use `--status` to see the estimate:
+Use `--status` to see the estimate and its confidence marker:
 
 ```bash
 whichllm --status
 ```
+
+Markers in the speed column:
+
+- `~`: estimated speed range is available
+- `?`: low-confidence estimate; runtime/backend differences can be large
+
+JSON includes the same information as `speed_confidence`,
+`speed_range_tok_per_sec`, and `speed_notes`.
 
 ## Apple Silicon partial offload looks different
 

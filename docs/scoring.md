@@ -133,6 +133,19 @@ After ranking, if any candidate is at least `5 tok/s`, whichllm drops candidates
 below `1.5 tok/s`. This avoids recommending models that technically fit but are
 not practical to use.
 
+The reported speed is a point estimate, not a live benchmark. Ranking also
+exposes speed confidence:
+
+| Confidence | Range factor | Typical cases |
+| --- | ---: | --- |
+| `medium` | `0.60x`-`1.60x` | Normal GPU estimates, synthetic GGUF estimates, AMD shared-memory APU MoE estimates |
+| `low` | `0.35x`-`2.00x` | CPU-only, partial offload, unknown bandwidth, Apple Silicon MoE |
+| `high` | `0.85x`-`1.20x` | Reserved for future measured-speed data |
+
+With `--status`, speed cells use `~` for medium-confidence estimates and `?`
+for low-confidence estimates. JSON exposes the same data as
+`speed_confidence`, `speed_range_tok_per_sec`, and `speed_notes`.
+
 ## Source trust
 
 The source organization contributes a small adjustment:

@@ -153,7 +153,8 @@ disk space. If the model cannot be downloaded, it is marked unrunnable.
 ## Known limitations
 
 - GPU bandwidth is a lookup or database estimate, not a live benchmark.
-- Speed estimates are order-of-magnitude planning numbers.
+- Speed estimates are planning numbers. Use `--status` or JSON fields such as
+  `speed_confidence` and `speed_range_tok_per_sec` to see uncertainty.
 - Driver, runtime, batch size, prompt length, and thermal limits can change real
   performance.
 - Multi-GPU runtime behavior depends on the inference backend and is only

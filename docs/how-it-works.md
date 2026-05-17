@@ -162,7 +162,7 @@ For each candidate variant:
 
 1. Estimate memory.
 2. Check whether it can run.
-3. Estimate tok/s.
+3. Estimate tok/s and attach speed confidence/range metadata.
 4. Resolve benchmark evidence.
 5. Compute a quality score.
 6. Keep the best variant for the model family.
@@ -184,4 +184,6 @@ See [Scoring](scoring.md) for the score details.
 - `upgrade` comparison tables and JSON
 
 Normal ranking tables show published date and downloads. With `--status`, the
-table instead shows memory required, estimated speed, and fit type.
+table instead shows memory required, estimated speed, and fit type. Speed cells
+use `~` for normal estimates with a range and `?` for low-confidence,
+backend-sensitive estimates.
