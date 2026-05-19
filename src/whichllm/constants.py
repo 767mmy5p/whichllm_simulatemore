@@ -66,6 +66,8 @@ GPU_BANDWIDTH: dict[str, float] = {
     # NVIDIA Data Center
     "H100": 3350.0,
     "H200": 4800.0,
+    "DGX Spark": 273.0,
+    "GB10": 273.0,
     "A100 80GB": 2039.0,
     "A100 40GB": 1555.0,
     "A100": 1555.0,
@@ -414,6 +416,8 @@ NVIDIA_COMPUTE_CAPABILITY: dict[str, tuple[int, int]] = {
     # Data Center
     "H100": (9, 0),
     "H200": (9, 0),
+    "DGX Spark": (12, 1),
+    "GB10": (12, 1),
     "A100": (8, 0),
     "A6000": (8, 6),
     "A5000": (8, 6),

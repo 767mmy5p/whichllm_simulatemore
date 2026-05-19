@@ -6,10 +6,12 @@ import logging
 import re
 import subprocess
 
-from whichllm.constants import GPU_BANDWIDTH, NVIDIA_COMPUTE_CAPABILITY
+from whichllm.constants import GPU_BANDWIDTH, NVIDIA_COMPUTE_CAPABILITY, _GiB
 from whichllm.hardware.types import GPUInfo
 
 logger = logging.getLogger(__name__)
+
+_NVIDIA_UNIFIED_MEMORY_MARKERS = ("GB10", "DGX SPARK")
 
 
 def _lookup_compute_capability(name: str) -> tuple[int, int] | None:
@@ -27,6 +29,42 @@ def _lookup_bandwidth(name: str) -> float | None:
         if key.upper() in name_upper:
             return GPU_BANDWIDTH[key]
     return None
+
+
+def _is_unified_memory_nvidia_gpu(name: str) -> bool:
+    name_upper = name.upper()
+    return any(marker in name_upper for marker in _NVIDIA_UNIFIED_MEMORY_MARKERS)
+
+
+def _system_memory_bytes() -> int:
+    from whichllm.hardware.memory import detect_ram_bytes
+
+    ram_bytes = detect_ram_bytes()
+    if ram_bytes > 0:
+        return ram_bytes
+    return 128 * _GiB
+
+
+def _make_nvidia_gpu(
+    name: str,
+    vram_bytes: int | None,
+    cuda_version: str | None = None,
+) -> GPUInfo:
+    shared_memory = _is_unified_memory_nvidia_gpu(name)
+    if shared_memory and (vram_bytes is None or vram_bytes <= 0):
+        vram_bytes = _system_memory_bytes()
+    elif vram_bytes is None:
+        vram_bytes = 0
+
+    return GPUInfo(
+        name=name,
+        vendor="nvidia",
+        vram_bytes=vram_bytes,
+        compute_capability=_lookup_compute_capability(name),
+        cuda_version=cuda_version,
+        memory_bandwidth_gbps=_lookup_bandwidth(name),
+        shared_memory=shared_memory,
+    )
 
 
 def _detect_nvidia_gpus_via_smi() -> list[GPUInfo]:
@@ -56,19 +94,14 @@ def _detect_nvidia_gpus_via_smi() -> list[GPUInfo]:
         name, memory_mib_text = parts
         match = re.search(r"\d+", memory_mib_text)
         if not match:
-            logger.debug(f"Could not parse nvidia-smi memory value: {line!r}")
+            if not _is_unified_memory_nvidia_gpu(name):
+                logger.debug(f"Could not parse nvidia-smi memory value: {line!r}")
+                continue
+            gpus.append(_make_nvidia_gpu(name, None))
             continue
 
         memory_mib = int(match.group(0))
-        gpus.append(
-            GPUInfo(
-                name=name,
-                vendor="nvidia",
-                vram_bytes=memory_mib * 1024**2,
-                compute_capability=_lookup_compute_capability(name),
-                memory_bandwidth_gbps=_lookup_bandwidth(name),
-            )
-        )
+        gpus.append(_make_nvidia_gpu(name, memory_mib * 1024**2))
 
     return gpus
 
@@ -104,18 +137,16 @@ def detect_nvidia_gpus() -> list[GPUInfo]:
             if isinstance(name, bytes):
                 name = name.decode("utf-8")
 
-            mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+            try:
+                mem_info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                vram_bytes = mem_info.total
+            except pynvml.NVMLError:
+                if not _is_unified_memory_nvidia_gpu(name):
+                    raise
+                logger.debug(f"NVML did not report dedicated memory for {name}")
+                vram_bytes = None
 
-            gpus.append(
-                GPUInfo(
-                    name=name,
-                    vendor="nvidia",
-                    vram_bytes=mem_info.total,
-                    compute_capability=_lookup_compute_capability(name),
-                    cuda_version=cuda_str,
-                    memory_bandwidth_gbps=_lookup_bandwidth(name),
-                )
-            )
+            gpus.append(_make_nvidia_gpu(name, vram_bytes, cuda_str))
     except pynvml.NVMLError as e:
         logger.debug(f"Error enumerating NVIDIA GPUs: {e}")
     finally:

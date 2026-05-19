@@ -186,6 +186,8 @@ discrete GPUs.
 
 The same is true for recognized AMD shared-memory APUs such as Strix Halo,
 Ryzen AI MAX, and Ryzen AI / Radeon 890M-class integrated graphics.
+DGX Spark / NVIDIA GB10 is handled the same way when NVIDIA reports GPU memory
+as unavailable.
 
 On Windows, `Win32_VideoController.AdapterRAM` can cap around 4 GB. whichllm
 uses the 64-bit registry memory value when it is available, and treats known

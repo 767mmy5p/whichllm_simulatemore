@@ -42,6 +42,10 @@ For known cards, `constants.py` provides:
 - memory bandwidth
 - compute capability
 
+DGX Spark / NVIDIA GB10 uses unified system memory. When the driver reports
+`memory.total` as unavailable, whichllm treats GB10 as shared memory and uses
+system RAM for fit checks.
+
 Compute capability is used to warn when a card is below the minimum expected by
 common local inference tools.
 
