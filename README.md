@@ -12,6 +12,62 @@ Auto-detects your GPU/CPU/RAM and ranks the top models from HuggingFace that fit
 
 [日本語版はこちら](docs/README.ja.md)
 
+## Quick start
+
+Run the recommendation command once, with no project setup.
+
+```bash
+uvx whichllm@latest
+```
+
+Simulate a GPU before you buy hardware.
+
+```bash
+uvx whichllm@latest --gpu "RTX 4090"
+```
+
+Install it when you use it often.
+
+```bash
+uv tool install whichllm
+uv tool upgrade whichllm  # update an existing install
+```
+
+Other install paths.
+
+```bash
+brew install andyyyy64/whichllm/whichllm
+pip install whichllm
+```
+
+## Common workflows
+
+After install, run `whichllm` directly. For one-off runs, replace `whichllm`
+with `uvx whichllm@latest`.
+
+```bash
+# Best models for this machine
+whichllm
+
+# Pretend you have a specific GPU
+whichllm --gpu "RTX 4090"
+
+# Compare upgrade candidates
+whichllm upgrade "RTX 4090" "RTX 5090" "H100"
+
+# Find the GPU needed for a model
+whichllm plan "llama 3 70b"
+
+# Start a chat with a model
+whichllm run "qwen 2.5 1.5b gguf"
+
+# Print copy-paste Python
+whichllm snippet "qwen 7b"
+
+# Return JSON for scripts
+whichllm --top 1 --json
+```
+
 ![demo](assets/demo.gif)
 
 ## See it
@@ -30,7 +86,7 @@ A size-only "what fits?" tool would hand you the bigger one. That gap is
 the whole point of whichllm. (Note #3: a MoE model at 102 t/s — speed is
 ranked on *active* params, quality on *total*.)
 
-### What can I run?
+## What can I run?
 
 Real top picks (snapshot 2026-05 — your results track **live** HuggingFace
 data, this is not a static list):
@@ -43,14 +99,7 @@ data, this is not a static list):
 | Apple M3 Max | 36 GB | `Qwen3.6-27B` · Q5_K_M · score 89.4 | ~9 t/s |
 | CPU only | — | `gpt-oss-20b` (MoE) · Q4_K_M · score 45.2 | ~6 t/s |
 
-`whichllm --gpu "<your card>"` to simulate any of these before you buy.
-
-> Useful? A GitHub star helps other people find it — and I'd genuinely like
-> to know what it picked for your rig: drop it in [Issues](https://github.com/Andyyyy64/whichllm/issues).
-
-## Star History
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Andyyyy64/whichllm&type=Date)](https://www.star-history.com/#Andyyyy64/whichllm&Date)
+`whichllm --gpu "<your card>"` simulates any of these before you buy.
 
 ## Why whichllm?
 
@@ -97,7 +146,9 @@ whichllm is built to get right.
 
 ## Run & Snippet
 
-**Try any model with a single command.** No manual installs needed — whichllm creates an isolated environment via `uv`, installs dependencies, downloads the model, and starts an interactive chat.
+Try any model with a single command. No manual installs needed — whichllm
+creates an isolated environment via `uv`, installs dependencies, downloads the
+model, and starts an interactive chat.
 
 ![run demo](assets/demo-run.gif)
 
@@ -140,42 +191,6 @@ output = llm.create_chat_completion(
 print(output["choices"][0]["message"]["content"])
 ```
 
-## Install
-
-### uv (recommended)
-
-```bash
-uvx whichllm
-```
-
-To install permanently:
-
-```bash
-uv tool install whichllm
-```
-
-### Homebrew
-
-```bash
-brew install andyyyy64/whichllm/whichllm
-```
-
-### pip
-
-```bash
-pip install whichllm
-```
-
-### Development
-
-```bash
-git clone https://github.com/Andyyyy64/whichllm.git
-cd whichllm
-uv sync --dev
-uv run whichllm
-uv run pytest
-```
-
 ## Usage
 
 ```bash
@@ -187,7 +202,6 @@ whichllm --gpu "RTX 4090"
 whichllm --gpu "RTX 5090"
 # Specify variant
 whichllm --gpu "RTX 5060 16"
-
 
 # CPU-only mode
 whichllm --cpu-only
@@ -361,6 +375,16 @@ src/whichllm/
     └── display.py      # Rich table, JSON output, hardware/plan displays
 ```
 
+## Development
+
+```bash
+git clone https://github.com/Andyyyy64/whichllm.git
+cd whichllm
+uv sync --dev
+uv run whichllm
+uv run pytest
+```
+
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
@@ -373,6 +397,13 @@ reports, packaging, test fixtures, benchmark updates, and support for more
 machines.
 
 whichllm will stay open-source either way. Issues and PRs are always welcome.
+
+Useful? A GitHub star helps other people find it, and I'd genuinely like to
+know what it picked for your rig. Drop it in [Issues](https://github.com/Andyyyy64/whichllm/issues).
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=Andyyyy64/whichllm&type=Date)](https://www.star-history.com/#Andyyyy64/whichllm&Date)
 
 ## Requirements
 
