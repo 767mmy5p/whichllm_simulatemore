@@ -19,24 +19,40 @@ Common options:
 | `--top`, `-n` | Number of ranked models to show. Default: `10` |
 | `--context-length`, `-c` | Context length used for KV cache estimation. Accepts integers or `k` shorthand such as `64k`. Default: `4096` |
 | `--quant`, `-q` | Keep only a quantization type such as `Q4_K_M` |
-| `--min-speed` | Keep only models above a tok/s estimate |
-| `--fit` | Runtime fit filter: `any` or `full-gpu` |
+| `--min-speed` | Keep only models above an exact tok/s estimate |
+| `--speed` | Named speed floor: `any`, `usable` (`10 tok/s`), or `fast` (`30 tok/s`) |
+| `--fit` | Runtime fit filter: `any`, `gpu`, or `full-gpu` |
 | `--gpu-only` | Alias for `--fit full-gpu`; excludes partial offload and CPU-only candidates |
 | `--profile` | Ranking profile: `general`, `coding`, `vision`, `math`, `any` |
 | `--evidence` | Benchmark evidence filter: `strict`, `base`, `any` |
 | `--direct` | Alias for `--evidence strict` |
-| `--status` | Show VRAM/RAM, speed, and fit columns instead of published/download columns. Speed may include `~` for estimated range or `?` for low confidence |
+| `--status` | Compatibility option. Runtime columns are now shown by default |
+| `--details` | Show download metadata instead of runtime columns |
 | `--min-params` | Minimum model knowledge capacity in billions of parameters |
 | `--json` | Print machine-readable JSON |
+| `--markdown`, `-m` | Print a pasteable GitHub-Flavored Markdown table |
 | `--refresh` | Ignore caches and fetch models/benchmarks again |
 | `--cpu-only` | Ignore GPUs and rank for CPU-only use |
 | `--gpu` | Simulate GPU(s) by name. Accepts repeated flags, comma-separated values, and count shorthand |
 | `--vram` | Override simulated GPU VRAM in GB. Requires `--gpu` |
+| `--vram-headroom` | Reserve per-GPU memory for runtime overhead. Default: `auto`. Accepts `none`, byte values like `1.5GB`, or percentages like `10%` |
+| `--ram-budget` | Cap RAM available for partial offload. Accepts `available`, byte values like `8GB`, or percentages like `50%` |
 | `--version` | Print the installed package version |
 
 `--fit any` is the default. It can include full-GPU, partial-offload, and
-CPU-only candidates when they are runnable. `--fit full-gpu` and `--gpu-only`
-keep only rows whose `fit_type` is `full_gpu`.
+CPU-only candidates when they are runnable. `--fit gpu`, `--fit full-gpu`, and
+`--gpu-only` keep only rows whose `fit_type` is `full_gpu`.
+
+The default table shows memory required, estimated generation speed, fit type,
+and published date. Use `--details` when you want download counts instead.
+Speed colors are absolute usability hints: red is under `4 tok/s`, yellow is
+`4-10 tok/s`, green is `10-30 tok/s`, and bright green is `30+ tok/s`. The `~`
+and `?` markers still refer to estimate confidence, not speed quality.
+
+`--vram-headroom auto` subtracts a small budget from each GPU before fit
+checks, so near-edge recommendations are less likely to overflow in tools such
+as LM Studio. Use `--vram-headroom none` to restore the raw detected VRAM.
+`--ram-budget available` caps offload planning to current available RAM.
 
 Examples:
 
@@ -50,11 +66,20 @@ whichllm --gpu "RTX 4090, RTX 3090"
 whichllm --profile coding --top 5
 whichllm --context-length 64k
 whichllm --gpu-only
-whichllm --fit full-gpu --status
+whichllm --fit gpu
+whichllm --speed usable
+whichllm --speed fast
+whichllm --min-speed 4
+whichllm --markdown
+whichllm --vram-headroom 1.5GB
+whichllm --ram-budget available
+whichllm --details
 whichllm --evidence strict
-whichllm --status
 whichllm --json | jq '.models[0]'
 ```
+
+`--markdown` is mutually exclusive with `--json`. It prints a plain Markdown
+table without the Rich hardware panel, colors, or box-drawing characters.
 
 Ranking JSON model rows include:
 
@@ -72,6 +97,9 @@ Ranking JSON model rows include:
 | `benchmark_status` | Display marker category for benchmark evidence |
 | `benchmark_source` | How benchmark evidence was matched: `direct`, `variant`, `base_model`, `line_interp`, `self_reported`, or `none` |
 | `benchmark_confidence` | Confidence in the benchmark match, `0.0`–`1.0` |
+
+The top-level `hardware` object also includes `usable_vram_bytes` per GPU,
+`ram_budget_bytes`, and `budget_notes` when memory budgets are active.
 
 ## `hardware`
 

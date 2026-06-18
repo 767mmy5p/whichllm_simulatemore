@@ -99,6 +99,11 @@ def display_hardware(hw: HardwareInfo) -> None:
                 )
             else:
                 vram = _format_bytes(gpu.vram_bytes)
+            if (
+                gpu.usable_vram_bytes is not None
+                and gpu.usable_vram_bytes < gpu.vram_bytes
+            ):
+                vram += f" (budget {_format_bytes(gpu.usable_vram_bytes)})"
             bw = (
                 f"{gpu.memory_bandwidth_gbps:.0f} GB/s"
                 if gpu.memory_bandwidth_gbps
@@ -131,9 +136,14 @@ def display_hardware(hw: HardwareInfo) -> None:
     avx_str = f" ({', '.join(avx_flags)})" if avx_flags else ""
     lines.append(f"[bold blue]CPU:[/] {hw.cpu_name} — {hw.cpu_cores} cores{avx_str}")
 
-    lines.append(f"[bold blue]RAM:[/] {_format_bytes(hw.ram_bytes)}")
+    ram = _format_bytes(hw.ram_bytes)
+    if hw.ram_budget_bytes is not None and hw.ram_budget_bytes < hw.ram_bytes:
+        ram += f" (budget {_format_bytes(hw.ram_budget_bytes)})"
+    lines.append(f"[bold blue]RAM:[/] {ram}")
     lines.append(f"[bold blue]Disk free:[/] {_format_bytes(hw.disk_free_bytes)}")
     lines.append(f"[bold blue]OS:[/] {hw.os}")
+    for note in hw.budget_notes:
+        lines.append(f"[dim]{note}[/dim]")
 
     panel = Panel("\n".join(lines), title="[bold]Hardware Info[/]", border_style="blue")
     _console.console.print(panel)
@@ -158,17 +168,16 @@ def display_ranking(
     table = Table(title="Recommended Models", show_lines=True)
     table.add_column("#", style="bold", width=3, justify="right")
     table.add_column("Model", style="cyan", min_width=14, overflow="fold")
-    table.add_column("Params", justify="right", width=6)
     table.add_column("Quant", justify="center", width=6)
     if show_status:
-        table.add_column(mem_label, justify="right", width=8)
-        table.add_column("Speed", justify="right", width=8)
-        table.add_column("Fit", justify="center", width=7)
+        table.add_column(f"Fit / {mem_label}", justify="center", width=8)
+        table.add_column("Speed", justify="right", width=12)
+        table.add_column("Published", justify="center", width=10)
     else:
+        table.add_column("Params", justify="right", width=6)
         table.add_column("Published", justify="center", width=10)
         table.add_column("Downloads", justify="right", width=9)
     table.add_column("Score", justify="right", width=5)
-    table.add_column("License", width=8)
 
     download_logs = [
         log10(max(r.model.downloads, 1)) for r in results if r.model.downloads > 0
@@ -217,22 +226,24 @@ def display_ranking(
         if r.model.is_moe and r.model.parameter_count_active:
             params_str += f" ({_format_params(r.model.parameter_count_active)}a)"
 
-        license_str = r.model.license or "—"
-
         model_link = Text(r.model.id, style="cyan")
         model_link.stylize(f"link https://huggingface.co/{r.model.id}")
+        if show_status:
+            model_link.append(f"\n{params_str}", style="dim")
 
         row_cells = [
             str(i),
             model_link,
-            params_str,
             quant,
         ]
         if show_status:
-            row_cells.extend([vram_str, speed_str, fit_str])
+            row_cells.extend(
+                [f"{fit_str}\n[dim]{vram_str}[/dim]", speed_str, published_str]
+            )
         else:
+            row_cells.append(params_str)
             row_cells.extend([published_str, downloads_str])
-        row_cells.extend([score_str, license_str])
+        row_cells.append(score_str)
         table.add_row(*row_cells)
 
     _console.console.print(table)

@@ -8,7 +8,7 @@ from whichllm.constants import VULKAN_ONLY_GPUS
 from whichllm.engine.quantization import estimate_weight_bytes
 from whichllm.engine.types import CompatibilityResult
 from whichllm.engine.vram import estimate_vram
-from whichllm.hardware.memory import estimate_usable_ram
+from whichllm.hardware.memory import effective_usable_ram
 from whichllm.hardware.types import GPUInfo, HardwareInfo
 from whichllm.models.types import GGUFVariant, ModelInfo
 
@@ -17,10 +17,17 @@ _MULTI_GPU_HOMOGENEOUS_UTILIZATION = 0.95
 _MULTI_GPU_HETEROGENEOUS_UTILIZATION = 0.90
 
 
-def _gpu_available_memory(gpu: GPUInfo, usable_ram: int) -> int:
-    if gpu.shared_memory and gpu.vram_bytes < 2 * _GiB:
+def _gpu_available_memory(
+    gpu: GPUInfo, usable_ram: int, *, ram_budget_active: bool = False
+) -> int:
+    vram_bytes = (
+        gpu.usable_vram_bytes if gpu.usable_vram_bytes is not None else gpu.vram_bytes
+    )
+    if gpu.shared_memory and vram_bytes < 2 * _GiB:
         return usable_ram
-    return gpu.vram_bytes
+    if gpu.shared_memory and ram_budget_active:
+        return min(vram_bytes, usable_ram)
+    return vram_bytes
 
 
 def _uses_shared_system_pool(gpu: GPUInfo) -> bool:
@@ -119,15 +126,18 @@ def check_compatibility(
 
     vram_required = estimate_vram(model, variant, context_length)
 
-    usable_ram = estimate_usable_ram(hardware.ram_bytes)
+    usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
 
     # Determine best GPU
     best_gpu: GPUInfo | None = None
     best_gpu_available = 0
     gpu_available_values: list[int] = []
     candidate_gpus = _fit_candidate_gpus(hardware.gpus)
+    ram_budget_active = hardware.ram_budget_bytes is not None
     for gpu in candidate_gpus:
-        gpu_available = _gpu_available_memory(gpu, usable_ram)
+        gpu_available = _gpu_available_memory(
+            gpu, usable_ram, ram_budget_active=ram_budget_active
+        )
         gpu_available_values.append(gpu_available)
         if best_gpu is None or gpu_available > best_gpu_available:
             best_gpu = gpu

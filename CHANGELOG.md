@@ -4,6 +4,28 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+## [0.5.12] - 2026-06-18
+
+### Added
+
+- Default ranking tables now show memory required, estimated generation speed,
+  fit type, and published date. Download counts are still available with
+  `--details`.
+- Added `--speed any|usable|fast` as named generation-speed filters while
+  keeping `--min-speed` for exact tok/s thresholds.
+- Added `--fit gpu` as a natural alias for full-GPU-only recommendations.
+- Added `--markdown` / `-m` for pasteable GitHub-Flavored Markdown ranking
+  tables. (#111)
+- Added `--vram-headroom` and `--ram-budget` so users can avoid edge VRAM fits
+  and cap partial-offload planning to available or fixed system RAM.
+
+### Changed
+
+- Speed color now reflects practical generation speed. `~` and `?` remain
+  estimate-confidence markers instead of being the primary speed color.
+
 ## [0.5.11] - 2026-06-18
 
 ### Added

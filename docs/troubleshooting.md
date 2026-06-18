@@ -82,7 +82,7 @@ whichllm --gpu "RTX 3060" --vram 12
 Try:
 
 ```bash
-whichllm --status
+whichllm
 whichllm --cpu-only
 whichllm --refresh
 ```
@@ -91,6 +91,7 @@ Common causes:
 
 - the selected `--quant` is too restrictive
 - `--gpu-only` or `--fit full-gpu` filters out partial-offload and CPU-only candidates
+- `--speed usable`, `--speed fast`, or `--min-speed` filters out slower candidates
 - `--min-speed` is too high
 - `--evidence strict` filters out all candidates
 - the requested context length is too large
@@ -113,12 +114,65 @@ Use:
 
 ```bash
 whichllm --gpu-only
-whichllm --fit full-gpu --status
+whichllm --fit gpu
+whichllm --fit full-gpu
 ```
 
 If no rows are shown, this machine has no ranked candidates that fit fully in
 GPU memory under the current filters. Remove `--gpu-only`, lower the context
 length, or try a smaller quantization.
+
+## A model fits, but it is too slow
+
+The default ranking table shows estimated generation speed. Slow rows are red,
+marginal rows are yellow, usable rows are green, and fast rows are bright
+green. The `~` and `?` markers are confidence markers for the estimate.
+
+Filter slow rows with:
+
+```bash
+whichllm --speed usable  # >=10 tok/s
+whichllm --speed fast    # >=30 tok/s
+whichllm --min-speed 4   # exact floor, if you want a lower threshold
+```
+
+For an exact threshold:
+
+```bash
+whichllm --min-speed 10
+```
+
+## LM Studio or another runtime says the model barely does not fit
+
+whichllm estimates model memory, but real runtimes can need extra room for
+loader overhead, graph buffers, KV cache choices, and OS pressure. By default,
+whichllm reserves a small automatic VRAM headroom before fit checks.
+
+Tune it with:
+
+```bash
+whichllm --vram-headroom 1.5GB
+whichllm --vram-headroom 10%
+whichllm --vram-headroom none
+```
+
+Use `none` when you want the old raw-VRAM behavior.
+
+## RAM offload depends on what else is running
+
+Partial offload uses system RAM. If Docker, Elasticsearch, a browser, or
+another workload is already using a large amount of memory, cap the offload
+budget:
+
+```bash
+whichllm --ram-budget available
+whichllm --ram-budget 8GB
+whichllm --ram-budget 50%
+```
+
+`available` reads the current available RAM from the OS at startup. Fixed
+values are useful when you know how much memory you want to leave for other
+processes.
 
 ## Results look stale
 
@@ -215,14 +269,15 @@ Speed is an estimate based on:
 Real performance depends on the inference runtime, driver, prompt length,
 batching, thermal limits, and background memory pressure.
 
-Use `--status` to see the estimate and its confidence marker:
+The default ranking table shows the speed estimate and its confidence marker.
+Use `--details` only when you want download counts instead.
 
-```bash
-whichllm --status
-```
+Speed colors and markers:
 
-Markers in the speed column:
-
+- red: slow generation speed, under 4 tok/s
+- yellow: marginal generation speed, 4-10 tok/s
+- green: usable generation speed, 10-30 tok/s
+- bright green: fast local generation speed, 30+ tok/s
 - `~`: estimated speed range is available
 - `?`: low-confidence estimate; runtime/backend differences can be large
 
@@ -321,10 +376,11 @@ whichllm plan "Qwen2.5-72B" --quant Q4_K_M
 whichllm plan "Qwen2.5-72B" --quant Q8_0 --context-length 32768
 ```
 
-Use JSON output when filing issues:
+Use plain output when filing issues:
 
 ```bash
-whichllm --gpu "RTX 4090" --status --json
+whichllm --gpu "RTX 4090" --json
+whichllm --gpu "RTX 4090" --markdown
 whichllm hardware
 ```
 

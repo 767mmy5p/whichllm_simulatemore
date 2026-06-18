@@ -7,6 +7,7 @@ from typer import Exit
 import whichllm.cli as cli_mod
 import whichllm.__main__ as main_mod
 from whichllm.cli import (
+    _apply_memory_budgets,
     _apply_gpu_overrides,
     _auto_min_params_for_profile,
     _fill_missing_published_at,
@@ -14,10 +15,12 @@ from whichllm.cli import (
     _generate_chat_script,
     _include_vision_candidates,
     _merge_model_eval_benchmarks,
+    _parse_memory_amount,
     _pick_gguf_variant,
     _resolve_ranked_gguf_for_run,
     _resolve_evidence_mode,
     _resolve_fit_filter,
+    _resolve_speed_filter,
     _search_model,
     _validate_evidence,
     app,
@@ -61,6 +64,31 @@ def test_auto_min_params_general_by_vram():
 
 def test_auto_min_params_non_general_disabled():
     assert _auto_min_params_for_profile(_hw_with_gpu(24), "coding") is None
+
+
+def test_auto_min_params_uses_usable_vram_budget():
+    hw = _hw_with_gpu(20)
+    hw.gpus[0].usable_vram_bytes = int(19.0 * 1024**3)
+
+    assert _auto_min_params_for_profile(hw, "general") == 8.0
+
+
+def test_auto_min_params_uses_ram_budget_for_shared_memory_gpu():
+    hw = HardwareInfo(
+        gpus=[
+            GPUInfo(
+                name="Apple M2",
+                vendor="apple",
+                vram_bytes=16 * 1024**3,
+                usable_vram_bytes=15 * 1024**3,
+                shared_memory=True,
+            )
+        ],
+        ram_bytes=16 * 1024**3,
+        ram_budget_bytes=4 * 1024**3,
+    )
+
+    assert _auto_min_params_for_profile(hw, "general") == 2.0
 
 
 def test_apply_gpu_overrides_accepts_multiple_simulated_gpus():
@@ -191,6 +219,7 @@ def test_resolve_evidence_mode_direct_alias_wins():
 
 def test_resolve_fit_filter_accepts_gpu_only_alias():
     assert _resolve_fit_filter("any", gpu_only=False) == "any"
+    assert _resolve_fit_filter("gpu", gpu_only=False) == "full_gpu"
     assert _resolve_fit_filter("full-gpu", gpu_only=False) == "full_gpu"
     assert _resolve_fit_filter("full_gpu", gpu_only=False) == "full_gpu"
     assert _resolve_fit_filter("any", gpu_only=True) == "full_gpu"
@@ -199,6 +228,56 @@ def test_resolve_fit_filter_accepts_gpu_only_alias():
 def test_resolve_fit_filter_rejects_unknown_mode():
     with pytest.raises(Exit):
         _resolve_fit_filter("partial", gpu_only=False)
+
+
+def test_resolve_speed_filter_presets_and_min_speed_override():
+    assert _resolve_speed_filter("any", min_speed=None) is None
+    assert _resolve_speed_filter("usable", min_speed=None) == 10.0
+    assert _resolve_speed_filter("fast", min_speed=None) == 30.0
+    assert _resolve_speed_filter("fast", min_speed=2.5) == 2.5
+
+
+def test_resolve_speed_filter_rejects_unknown_mode():
+    with pytest.raises(Exit):
+        _resolve_speed_filter("slowish", min_speed=None)
+
+
+def test_parse_memory_amount_supports_gb_mb_and_percent():
+    assert _parse_memory_amount("1.5GB", option_name="--x") == int(1.5 * 1024**3)
+    assert _parse_memory_amount("512MB", option_name="--x") == 512 * 1024**2
+    assert _parse_memory_amount("8", option_name="--x") == 8 * 1024**3
+    assert (
+        _parse_memory_amount("10%", option_name="--x", total_bytes=20 * 1024**3)
+        == 2 * 1024**3
+    )
+
+
+def test_apply_memory_budgets_sets_vram_headroom_and_ram_budget():
+    hw = _hw_with_gpu(16)
+
+    _apply_memory_budgets(hw, vram_headroom="1GB", ram_budget="8GB")
+
+    assert hw.gpus[0].vram_bytes == 16 * 1024**3
+    assert hw.gpus[0].usable_vram_bytes == 15 * 1024**3
+    assert hw.ram_budget_bytes == 8 * 1024**3
+    assert any("VRAM headroom" in note for note in hw.budget_notes)
+    assert any("RAM budget" in note for note in hw.budget_notes)
+
+
+def test_apply_memory_budgets_validates_vram_headroom_without_gpus():
+    hw = HardwareInfo(gpus=[], ram_bytes=16 * 1024**3)
+
+    with pytest.raises(Exit):
+        _apply_memory_budgets(hw, vram_headroom="nope", ram_budget=None)
+
+
+def test_apply_memory_budgets_accepts_valid_noop_vram_headroom_without_gpus():
+    hw = HardwareInfo(gpus=[], ram_bytes=16 * 1024**3)
+
+    _apply_memory_budgets(hw, vram_headroom="10%", ram_budget=None)
+
+    assert hw.gpus == []
+    assert hw.ram_budget_bytes is None
 
 
 def test_main_passes_gpu_only_fit_filter(monkeypatch):
@@ -245,6 +324,140 @@ def test_main_passes_gpu_only_fit_filter(monkeypatch):
 
     assert result.exit_code == 0
     assert captured["fit_filter"] == "full_gpu"
+
+
+def test_main_passes_speed_preset_and_default_runtime_columns(monkeypatch):
+    model = ModelInfo(
+        id="org/Test-7B",
+        family_id="test-7b",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+        downloads=1,
+        likes=1,
+        published_at="2026-01-01T00:00:00.000Z",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_rank_models(models, hardware, **kwargs):
+        captured["min_speed"] = kwargs.get("min_speed")
+        return [
+            CompatibilityResult(
+                model=model,
+                gguf_variant=None,
+                can_run=True,
+                vram_required_bytes=4 * 1024**3,
+                vram_available_bytes=8 * 1024**3,
+                fit_type="full_gpu",
+                estimated_tok_per_sec=8.0,
+                quality_score=80.0,
+            )
+        ]
+
+    def fake_display_ranking(results, **kwargs):
+        captured["show_status"] = kwargs.get("show_status")
+
+    monkeypatch.setattr(
+        "whichllm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8)
+    )
+    monkeypatch.setattr("whichllm.models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("whichllm.models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("whichllm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr(
+        "whichllm.output.display.display_hardware", lambda hardware: None
+    )
+    monkeypatch.setattr("whichllm.output.display.display_ranking", fake_display_ranking)
+
+    result = CliRunner().invoke(app, ["--speed", "usable"])
+
+    assert result.exit_code == 0
+    assert captured["min_speed"] == 10.0
+    assert captured["show_status"] is True
+
+
+def test_main_details_flag_restores_metadata_columns(monkeypatch):
+    captured: dict[str, object] = {}
+
+    def fake_rank_models(models, hardware, **kwargs):
+        return []
+
+    def fake_display_ranking(results, **kwargs):
+        captured["show_status"] = kwargs.get("show_status")
+
+    monkeypatch.setattr(
+        "whichllm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8)
+    )
+    monkeypatch.setattr("whichllm.models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("whichllm.models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("whichllm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr(
+        "whichllm.output.display.display_hardware", lambda hardware: None
+    )
+    monkeypatch.setattr("whichllm.output.display.display_ranking", fake_display_ranking)
+
+    result = CliRunner().invoke(app, ["--details", "--min-params", "1"])
+
+    assert result.exit_code == 0
+    assert captured["show_status"] is False
+
+
+def test_main_markdown_alias_dispatches_markdown_output(monkeypatch):
+    model = ModelInfo(
+        id="org/Test-7B",
+        family_id="test-7b",
+        name="Test-7B",
+        parameter_count=7_000_000_000,
+        downloads=1,
+        likes=1,
+        published_at="2026-01-01T00:00:00.000Z",
+    )
+    captured: dict[str, object] = {}
+
+    def fake_rank_models(models, hardware, **kwargs):
+        return [
+            CompatibilityResult(
+                model=model,
+                gguf_variant=None,
+                can_run=True,
+                vram_required_bytes=4 * 1024**3,
+                vram_available_bytes=8 * 1024**3,
+                fit_type="full_gpu",
+                estimated_tok_per_sec=12.0,
+                quality_score=80.0,
+            )
+        ]
+
+    def fake_display_markdown(results, hardware, **kwargs):
+        captured["called"] = True
+        captured["show_status"] = kwargs.get("show_status")
+
+    def fail_display_hardware(hardware):
+        raise AssertionError("markdown output should not render Rich hardware panel")
+
+    monkeypatch.setattr(
+        "whichllm.hardware.detector.detect_hardware", lambda: _hw_with_gpu(8)
+    )
+    monkeypatch.setattr("whichllm.models.cache.load_cache", lambda: [])
+    monkeypatch.setattr("whichllm.models.benchmark.load_benchmark_cache", lambda: {})
+    monkeypatch.setattr("whichllm.engine.ranker.rank_models", fake_rank_models)
+    monkeypatch.setattr(
+        "whichllm.output.display.display_markdown", fake_display_markdown
+    )
+    monkeypatch.setattr(
+        "whichllm.output.display.display_hardware", fail_display_hardware
+    )
+
+    result = CliRunner().invoke(app, ["-m"])
+
+    assert result.exit_code == 0
+    assert captured["called"] is True
+    assert captured["show_status"] is True
+
+
+def test_main_json_and_markdown_are_mutually_exclusive():
+    result = CliRunner().invoke(app, ["--json", "--markdown"])
+
+    assert result.exit_code == 1
+    assert "--json and --markdown are mutually exclusive" in result.stdout
 
 
 def test_main_empty_gpu_only_result_shows_fit_message(monkeypatch):
@@ -743,9 +956,11 @@ def test_json_output_includes_benchmark_source_and_confidence():
         gpus=[],
         cpu_name="Test CPU",
         cpu_cores=8,
+        ram_budget_bytes=32 * 1024**3,
         ram_bytes=64 * 1024**3,
         disk_free_bytes=500 * 1024**3,
         os="linux",
+        budget_notes=["RAM budget: 32.0 GB"],
     )
 
     buf = StringIO()
@@ -760,6 +975,8 @@ def test_json_output_includes_benchmark_source_and_confidence():
 
     data = json_mod.loads(buf.getvalue().strip())
     entry = data["models"][0]
+    assert data["hardware"]["ram_budget_bytes"] == 32 * 1024**3
+    assert data["hardware"]["budget_notes"] == ["RAM budget: 32.0 GB"]
     assert entry["benchmark_status"] == "estimated"
     assert entry["benchmark_source"] == "line_interp"
     assert entry["benchmark_confidence"] == 0.34

@@ -49,13 +49,23 @@ def _format_published_at(value: str | None) -> str:
 def _format_speed(result: CompatibilityResult) -> str:
     speed = result.estimated_tok_per_sec
     if speed is None:
-        return "N/A"
+        return "[grey50]N/A[/]"
     base = f"{speed:.1f} tok/s"
+    if speed < 4.0:
+        style = "red"
+    elif speed < 10.0:
+        style = "yellow"
+    elif speed < 30.0:
+        style = "green"
+    else:
+        style = "bright_green"
+
+    marker = ""
     if result.speed_confidence == "low":
-        return f"[red]{base} ?[/red]"
-    if result.speed_confidence == "medium":
-        return f"[yellow]{base} ~[/yellow]"
-    return base
+        marker = " ?"
+    elif result.speed_confidence == "medium":
+        marker = " ~"
+    return f"[{style}]{base}{marker}[/{style}]"
 
 
 def _parse_published_at(value: str | None) -> datetime | None:

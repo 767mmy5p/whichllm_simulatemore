@@ -24,6 +24,7 @@ Each GPU is represented as `GPUInfo`:
 - name
 - vendor
 - VRAM bytes
+- usable VRAM bytes, when a runtime headroom is active
 - NVIDIA compute capability, when known
 - CUDA or ROCm version, when known
 - memory bandwidth estimate
@@ -144,6 +145,16 @@ whichllm hardware --gpu "Unknown GPU" --vram 24
 
 `--vram` requires `--gpu`.
 
+By default, whichllm applies a small automatic VRAM headroom before fit checks.
+This avoids recommending models that only fit on paper but overflow in runtimes
+that need extra graph buffers or loader overhead. Tune it with:
+
+```bash
+whichllm --vram-headroom 1.5GB
+whichllm --vram-headroom 10%
+whichllm --vram-headroom none
+```
+
 Multi-GPU simulation accepts repeated flags, comma-separated values, and count
 shorthand:
 
@@ -171,6 +182,9 @@ If neither GPU memory nor usable RAM can hold the model, the candidate is not
 ranked.
 
 whichllm keeps a bounded system-RAM reserve for the OS and other processes.
+Use `--ram-budget available` to cap partial-offload planning to the current
+available RAM reported by the OS, or pass a fixed budget such as
+`--ram-budget 8GB`.
 
 ## Multiple GPUs
 
@@ -199,8 +213,8 @@ disk space. If the model cannot be downloaded, it is marked unrunnable.
 ## Known limitations
 
 - GPU bandwidth is a lookup or database estimate, not a live benchmark.
-- Speed estimates are planning numbers. Use `--status` or JSON fields such as
-  `speed_confidence` and `speed_range_tok_per_sec` to see uncertainty.
+- Speed estimates are planning numbers. The default table and JSON fields such
+  as `speed_confidence` and `speed_range_tok_per_sec` show uncertainty.
 - Driver, runtime, batch size, prompt length, and thermal limits can change real
   performance.
 - Multi-GPU runtime behavior depends on the inference backend and is only

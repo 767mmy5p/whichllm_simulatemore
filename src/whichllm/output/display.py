@@ -22,6 +22,7 @@ from whichllm.output.json_output import (
     display_plan_json,
     display_upgrade_json,
 )
+from whichllm.output.markdown import display_markdown
 from whichllm.output.plan import display_plan
 from whichllm.output.ranking import display_hardware, display_ranking
 from whichllm.output.upgrade import display_upgrade
@@ -30,6 +31,7 @@ __all__ = [
     "console",
     "display_hardware",
     "display_json",
+    "display_markdown",
     "display_plan",
     "display_plan_json",
     "display_ranking",

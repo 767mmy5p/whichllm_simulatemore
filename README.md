@@ -58,10 +58,17 @@ whichllm --gpu "RTX 4090"
 
 # Only show models that fit fully in GPU VRAM
 whichllm --gpu-only
-whichllm --fit full-gpu --status
+whichllm --fit gpu
 
 # Simulate a multi-GPU workstation
 whichllm --gpu "2x RTX 4090"
+
+# Hide models that are technically runnable but too slow
+whichllm --speed usable
+whichllm --speed fast
+
+# Pasteable GitHub / Slack / Discord output
+whichllm --markdown
 
 # Compare upgrade candidates
 whichllm upgrade "RTX 4090" "RTX 5090" "H100"
@@ -114,6 +121,10 @@ data, this is not a static list):
 By default, rankings include full-GPU, partial-offload, and CPU-only
 candidates when they are usable. Use `--gpu-only` or `--fit full-gpu` when
 you only want models that fit entirely in GPU VRAM.
+The default table shows memory, estimated generation speed, fit type, and
+published date. Speed is colored by practical usability: under 4 tok/s is red,
+4-10 is yellow, 10-30 is green, and 30+ is bright green. `~` / `?` still mark
+estimate confidence.
 
 ## Why whichllm?
 
@@ -156,6 +167,9 @@ whichllm is built to get right.
 - **GPU simulation** — Test with any GPU: `whichllm --gpu "RTX 4090"`
 - **Multi-GPU simulation** — Repeat `--gpu`, use commas, or write `2x RTX 4090`
 - **Full-GPU filter** — `--gpu-only` / `--fit full-gpu` hides offload candidates
+- **Speed-aware filtering** — `--speed usable|fast` hides slow rows by threshold
+- **Markdown output** — `--markdown` / `-m` prints pasteable GFM tables
+- **Runtime memory budgets** — `--vram-headroom` and `--ram-budget` avoid edge fits
 - **Hardware planning** — Reverse lookup: `whichllm plan "llama 3 70b"`
 - **Upgrade planning** — Compare your current machine with candidate GPUs
 - **JSON output** — Pipe-friendly: `whichllm --json`
@@ -225,18 +239,28 @@ whichllm --gpu "RTX 4090, RTX 3090"
 
 # Only show models that fit entirely in GPU VRAM
 whichllm --gpu-only
-whichllm --fit full-gpu --status
+whichllm --fit gpu
+whichllm --fit full-gpu
+
+# Avoid edge fits and background-RAM surprises
+whichllm --vram-headroom 1.5GB
+whichllm --ram-budget available
+whichllm --ram-budget 8GB
 
 # CPU-only mode
 whichllm --cpu-only
 
 # More results / filters
 whichllm --top 20
-whichllm --status
+whichllm --details          # show Downloads metadata instead of runtime columns
+whichllm --speed usable     # minimum 10 tok/s
+whichllm --speed fast       # minimum 30 tok/s
+whichllm --min-speed 4      # exact tok/s floor
+whichllm --markdown         # pasteable GitHub-Flavored Markdown table
 whichllm --profile coding
 whichllm --context-length 64k
 whichllm --quant Q4_K_M
-whichllm --min-speed 30
+whichllm --min-speed 30     # exact tok/s floor
 whichllm --evidence base   # allow id/base-model matches
 whichllm --evidence strict # id-exact only (same as --direct)
 whichllm --direct
@@ -266,6 +290,14 @@ whichllm run                       # auto-pick best for your hardware
 # Snippet: print ready-to-run Python code
 whichllm snippet "qwen 7b"
 whichllm snippet "llama 3 8b gguf" --quant Q5_K_M
+```
+
+Markdown output is intended for GitHub issues, READMEs, Slack, Discord, and
+blog posts:
+
+```bash
+whichllm --markdown
+whichllm -m --top 5 --gpu "RTX 4090"
 ```
 
 JSON model rows include `fit_type`, `vram_required_bytes`,
@@ -323,7 +355,11 @@ Score markers:
 - **`!sr`** (bright yellow) — Uploader-reported benchmark only, not independently verified
 - **`?`** (red) — No benchmark data available
 
-Speed markers in `--status`:
+Speed display:
+- **red** — Slow generation speed (`<4 tok/s`)
+- **yellow** — Marginal generation speed (`4-10 tok/s`)
+- **green** — Usable generation speed (`10-30 tok/s`)
+- **bright green** — Fast local generation speed (`>=30 tok/s`)
 - **`~`** (yellow) — Estimated tok/s range is available
 - **`?`** (red) — Low-confidence speed estimate; backend/runtime sensitivity is high
 

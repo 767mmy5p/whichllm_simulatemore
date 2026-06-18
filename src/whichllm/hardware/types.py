@@ -8,6 +8,7 @@ class GPUInfo:
     name: str
     vendor: str  # "nvidia" | "amd" | "apple" | "intel"
     vram_bytes: int
+    usable_vram_bytes: int | None = None
     compute_capability: tuple[int, int] | None = None  # NVIDIA only
     cuda_version: str | None = None
     rocm_version: str | None = None
@@ -23,5 +24,7 @@ class HardwareInfo:
     has_avx2: bool = False
     has_avx512: bool = False
     ram_bytes: int = 0
+    ram_budget_bytes: int | None = None
     disk_free_bytes: int = 0
     os: str = "linux"  # "linux" | "darwin" | "windows"
+    budget_notes: list[str] = field(default_factory=list)

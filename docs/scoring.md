@@ -139,9 +139,11 @@ exposes speed confidence:
 | `low` | `0.35x`-`2.00x` | CPU-only, partial offload, unknown bandwidth, Apple Silicon MoE |
 | `high` | `0.85x`-`1.20x` | Reserved for future measured-speed data |
 
-With `--status`, speed cells use `~` for medium-confidence estimates and `?`
-for low-confidence estimates. JSON exposes the same data as
-`speed_confidence`, `speed_range_tok_per_sec`, and `speed_notes`.
+Speed cells are colored by absolute usability: red is under `4 tok/s`, yellow
+is `4-10 tok/s`, green is `10-30 tok/s`, and bright green is `30+ tok/s`. `~`
+marks medium-confidence estimates with a range, and `?` marks low-confidence
+estimates. JSON exposes the same uncertainty data as `speed_confidence`,
+`speed_range_tok_per_sec`, and `speed_notes`.
 
 ## Source trust
 

@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import sys
 from typing import Optional
 
 import typer
 from rich.console import Console
 
+from whichllm.constants import _GiB
 from whichllm.hardware.types import HardwareInfo
 from whichllm.models.types import GGUFVariant, ModelInfo
 from whichllm.utils import _current_version, CONTEXT_LENGTH
@@ -65,6 +67,13 @@ def _validate_gpu_flags(
         raise typer.Exit(code=1)
 
 
+def _validate_output_flags(json_output: bool, markdown_output: bool) -> None:
+    """Validate mutually exclusive output formats."""
+    if json_output and markdown_output:
+        console.print("[red]Error:[/] --json and --markdown are mutually exclusive.")
+        raise typer.Exit(code=1)
+
+
 def _validate_profile(profile: str) -> str:
     """Validate ranking profile option."""
     valid = {"general", "coding", "vision", "math", "any"}
@@ -98,13 +107,154 @@ def _resolve_evidence_mode(evidence: str, direct: bool) -> str:
 
 def _resolve_fit_filter(fit: str, gpu_only: bool) -> str:
     """Resolve runtime fit filtering, keeping --gpu-only as a short alias."""
-    mode = fit.lower().replace("_", "-")
-    if mode not in {"any", "full-gpu"}:
-        console.print("[red]Error:[/] --fit must be one of: any, full-gpu.")
+    mode = fit.lower().replace("_", "-").replace(" ", "-")
+    if mode not in {"any", "gpu", "full-gpu", "fullgpu"}:
+        console.print("[red]Error:[/] --fit must be one of: any, gpu, full-gpu.")
         raise typer.Exit(code=1)
     if gpu_only:
         return "full_gpu"
-    return "full_gpu" if mode == "full-gpu" else "any"
+    return "full_gpu" if mode in {"gpu", "full-gpu", "fullgpu"} else "any"
+
+
+def _resolve_speed_filter(speed: str, min_speed: float | None) -> float | None:
+    """Resolve named speed presets while preserving --min-speed as exact input."""
+    if min_speed is not None:
+        return min_speed
+    mode = speed.lower().replace("_", "-")
+    presets = {
+        "any": None,
+        "usable": 10.0,
+        "fast": 30.0,
+    }
+    if mode not in presets:
+        console.print("[red]Error:[/] --speed must be one of: any, usable, fast.")
+        raise typer.Exit(code=1)
+    return presets[mode]
+
+
+_MEMORY_RE = re.compile(
+    r"^(?P<number>\d+(?:\.\d+)?)\s*(?P<unit>gib|gb|g|mib|mb|m)?$",
+    re.IGNORECASE,
+)
+
+
+def _parse_memory_amount(
+    value: str, *, option_name: str, total_bytes: int | None = None
+) -> int:
+    """Parse memory CLI values. Bare numbers are treated as GiB."""
+    raw = value.strip()
+    if not raw:
+        console.print(f"[red]Error:[/] {option_name} cannot be empty.")
+        raise typer.Exit(code=1)
+
+    if raw.endswith("%"):
+        if total_bytes is None:
+            console.print(f"[red]Error:[/] {option_name} percentage needs a base size.")
+            raise typer.Exit(code=1)
+        try:
+            pct = float(raw[:-1])
+        except ValueError:
+            console.print(f"[red]Error:[/] Invalid {option_name}: {value!r}.")
+            raise typer.Exit(code=1)
+        if pct < 0:
+            console.print(f"[red]Error:[/] {option_name} must be non-negative.")
+            raise typer.Exit(code=1)
+        return int(total_bytes * pct / 100.0)
+
+    match = _MEMORY_RE.match(raw)
+    if not match:
+        console.print(
+            f"[red]Error:[/] Invalid {option_name}: {value!r}. "
+            "Use values like 1.5GB, 512MB, 10%, or 8."
+        )
+        raise typer.Exit(code=1)
+
+    number = float(match.group("number"))
+    unit = (match.group("unit") or "gb").lower()
+    if number < 0:
+        console.print(f"[red]Error:[/] {option_name} must be non-negative.")
+        raise typer.Exit(code=1)
+
+    if unit in {"gib", "gb", "g"}:
+        return int(number * _GiB)
+    return int(number * 1024**2)
+
+
+def _auto_vram_headroom(vram_bytes: int) -> int:
+    """Default runtime headroom so near-edge fits do not over-promise."""
+    if vram_bytes <= 0:
+        return 0
+    return int(max(512 * 1024**2, min(vram_bytes * 0.05, 2 * _GiB)))
+
+
+def _parse_vram_headroom(value: str, vram_bytes: int) -> int:
+    mode = value.strip().lower()
+    if mode == "auto":
+        return _auto_vram_headroom(vram_bytes)
+    if mode in {"none", "off", "0"}:
+        return 0
+    return _parse_memory_amount(
+        value,
+        option_name="--vram-headroom",
+        total_bytes=vram_bytes,
+    )
+
+
+def _apply_memory_budgets(
+    hardware: HardwareInfo,
+    *,
+    vram_headroom: str,
+    ram_budget: str | None,
+) -> HardwareInfo:
+    """Apply user-facing memory budgets without mutating detected raw sizes."""
+    headroom_mode = vram_headroom.strip().lower()
+    if not hardware.gpus and headroom_mode not in {"auto", "none", "off", "0"}:
+        _parse_memory_amount(
+            vram_headroom,
+            option_name="--vram-headroom",
+            total_bytes=_GiB,
+        )
+
+    reserved_values: list[int] = []
+    for gpu in hardware.gpus:
+        reserved = _parse_vram_headroom(vram_headroom, gpu.vram_bytes)
+        gpu.usable_vram_bytes = max(0, gpu.vram_bytes - reserved)
+        if reserved > 0:
+            reserved_values.append(reserved)
+
+    if reserved_values:
+        unique_reserved = sorted(set(reserved_values))
+        if len(unique_reserved) == 1:
+            note = f"VRAM headroom: {_format_budget_bytes(unique_reserved[0])} reserved per GPU"
+        else:
+            note = "VRAM headroom: auto reserve applied per GPU"
+        hardware.budget_notes.append(note)
+
+    if ram_budget:
+        mode = ram_budget.strip().lower()
+        if mode == "available":
+            from whichllm.hardware.memory import detect_available_ram_bytes
+
+            hardware.ram_budget_bytes = detect_available_ram_bytes()
+            hardware.budget_notes.append(
+                f"RAM budget: current available {_format_budget_bytes(hardware.ram_budget_bytes)}"
+            )
+        elif mode not in {"auto", "none", "off"}:
+            hardware.ram_budget_bytes = _parse_memory_amount(
+                ram_budget, option_name="--ram-budget", total_bytes=hardware.ram_bytes
+            )
+            hardware.budget_notes.append(
+                f"RAM budget: {_format_budget_bytes(hardware.ram_budget_bytes)}"
+            )
+    return hardware
+
+
+def _format_budget_bytes(value: int) -> str:
+    if value >= _GiB:
+        return f"{value / _GiB:.1f} GB"
+    if value >= 1024**2:
+        return f"{value / 1024**2:.0f} MB"
+    return f"{value / 1024:.0f} KB"
 
 
 def _apply_gpu_overrides(
@@ -138,11 +288,18 @@ def _auto_min_params_for_profile(hardware: HardwareInfo, profile: str) -> float 
         return None
     if not hardware.gpus:
         return 2.0  # CPU-only: tiny is the only practical choice
-    from whichllm.hardware.memory import estimate_usable_ram
+    from whichllm.hardware.memory import effective_usable_ram
 
-    usable_ram = estimate_usable_ram(hardware.ram_bytes)
+    usable_ram = effective_usable_ram(hardware.ram_bytes, hardware.ram_budget_bytes)
     best_vram_gb = max(
-        (usable_ram if g.shared_memory and g.vram_bytes == 0 else g.vram_bytes)
+        (
+            usable_ram
+            if g.shared_memory
+            and (g.vram_bytes == 0 or hardware.ram_budget_bytes is not None)
+            else (
+                g.usable_vram_bytes if g.usable_vram_bytes is not None else g.vram_bytes
+            )
+        )
         for g in hardware.gpus
     ) / (1024**3)
     if best_vram_gb >= 30:
@@ -231,12 +388,17 @@ def main(
         None, "--quant", "-q", help="Filter by quantization type (e.g. Q4_K_M)"
     ),
     min_speed: Optional[float] = typer.Option(
-        None, "--min-speed", help="Minimum tok/s filter"
+        None, "--min-speed", help="Exact minimum tok/s filter"
+    ),
+    speed: str = typer.Option(
+        "any",
+        "--speed",
+        help="Speed preset filter: any | usable | fast",
     ),
     fit: str = typer.Option(
         "any",
         "--fit",
-        help="Runtime fit filter: any | full-gpu",
+        help="Runtime fit filter: any | gpu | full-gpu",
     ),
     gpu_only: bool = typer.Option(
         False,
@@ -256,7 +418,12 @@ def main(
     status: bool = typer.Option(
         False,
         "--status",
-        help="Show runtime status columns (Speed/Fit) in ranking table",
+        help="Show runtime columns (default; kept for compatibility)",
+    ),
+    details: bool = typer.Option(
+        False,
+        "--details",
+        help="Show Downloads metadata instead of runtime columns",
     ),
     min_params: Optional[float] = typer.Option(
         None,
@@ -269,6 +436,12 @@ def main(
         help="Ranking profile: general | coding | vision | math | any",
     ),
     json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
+    markdown_output: bool = typer.Option(
+        False,
+        "--markdown",
+        "-m",
+        help="Output as GitHub-Flavored Markdown",
+    ),
     cpu_only: bool = typer.Option(
         False, "--cpu-only", help="Ignore GPU and run in CPU-only mode"
     ),
@@ -280,15 +453,27 @@ def main(
     vram: Optional[float] = typer.Option(
         None, "--vram", help="Override VRAM in GB (requires --gpu)"
     ),
+    vram_headroom: str = typer.Option(
+        "auto",
+        "--vram-headroom",
+        help="Reserve GPU memory for runtime overhead: auto | none | 1GB | 10%",
+    ),
+    ram_budget: Optional[str] = typer.Option(
+        None,
+        "--ram-budget",
+        help="RAM budget for offload: available | 8GB | 50%",
+    ),
 ):
     """Detect hardware and recommend the best local LLMs."""
     if ctx.invoked_subcommand is not None:
         return
 
     _validate_gpu_flags(cpu_only, gpu, vram)
+    _validate_output_flags(json_output, markdown_output)
     profile = _validate_profile(profile)
     evidence_mode = _resolve_evidence_mode(evidence, direct)
     fit_filter = _resolve_fit_filter(fit, gpu_only)
+    speed_filter = _resolve_speed_filter(speed, min_speed)
 
     from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -307,7 +492,12 @@ def main(
         models_to_dicts,
     )
     from whichllm.models.grouper import group_models
-    from whichllm.output.display import display_hardware, display_json, display_ranking
+    from whichllm.output.display import (
+        display_hardware,
+        display_json,
+        display_markdown,
+        display_ranking,
+    )
 
     with Progress(
         SpinnerColumn(),
@@ -319,6 +509,9 @@ def main(
         task = progress.add_task("Detecting hardware...", total=None)
         hardware = detect_hardware()
         _apply_gpu_overrides(hardware, cpu_only, gpu, vram)
+        _apply_memory_budgets(
+            hardware, vram_headroom=vram_headroom, ram_budget=ram_budget
+        )
         progress.update(task, description="Hardware detected")
 
         # Step 2: Fetch models
@@ -381,7 +574,7 @@ def main(
             context_length=context_length,
             top_n=top,
             quant_filter=quant,
-            min_speed=min_speed,
+            min_speed=speed_filter,
             benchmark_scores=bench_scores,
             task_profile=profile,
             require_direct_top=True,
@@ -398,7 +591,7 @@ def main(
                 context_length=context_length,
                 top_n=top,
                 quant_filter=quant,
-                min_speed=min_speed,
+                min_speed=speed_filter,
                 benchmark_scores=bench_scores,
                 task_profile=profile,
                 require_direct_top=True,
@@ -420,23 +613,30 @@ def main(
                 )
 
     # Display results
+    empty_message = None
+    if fit_filter == "full_gpu":
+        empty_message = (
+            "No full-GPU models found for this hardware. "
+            "Remove --gpu-only or use --fit any to include partial offload "
+            "and CPU-only candidates."
+        )
     if json_output:
         display_json(results, hardware)
+    elif markdown_output:
+        display_markdown(
+            results,
+            hardware,
+            show_status=status or not details,
+            empty_message=empty_message,
+        )
     else:
-        empty_message = None
-        if fit_filter == "full_gpu":
-            empty_message = (
-                "No full-GPU models found for this hardware. "
-                "Remove --gpu-only or use --fit any to include partial offload "
-                "and CPU-only candidates."
-            )
         console.print()
         display_hardware(hardware)
         console.print()
         display_ranking(
             results,
             has_gpu=bool(hardware.gpus),
-            show_status=status,
+            show_status=status or not details,
             empty_message=empty_message,
         )
         console.print()

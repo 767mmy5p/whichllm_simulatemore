@@ -66,7 +66,19 @@ whichllm --gpu "RTX 4090" --gpu "RTX 3090"
 
 # GPUのVRAMに全部載る候補だけを見る
 whichllm --gpu-only
-whichllm --fit full-gpu --status
+whichllm --fit gpu
+
+# 速度の最低ラインを指定する
+whichllm --speed usable
+whichllm --speed fast
+whichllm --min-speed 4
+
+# GitHubやSlackに貼りやすいMarkdown表で出力する
+whichllm --markdown
+
+# 実行時のメモリ余白やRAM使用量を指定する
+whichllm --vram-headroom 1.5GB
+whichllm --ram-budget available
 
 # CPUのみとして評価する
 whichllm --cpu-only
@@ -81,6 +93,10 @@ JSONの各モデルには `estimated_tok_per_sec` に加えて、`fit_type`、
 `speed_range_tok_per_sec`、`speed_notes`、`benchmark_source`、
 `benchmark_confidence` が入ります。
 速度は実測値ではなく、ハードウェア情報とモデル情報からの推定です。
+通常の表には必要メモリ、推定生成速度、Fit種別、Published が表示されます。
+Downloads まで見たい場合は `--details` を使います。
+GitHub issue、README、Slack、Discord へ貼る場合は `--markdown` / `-m`
+でMarkdown表として出力できます。
 
 ## 主なコマンド
 
@@ -89,9 +105,12 @@ JSONの各モデルには `estimated_tok_per_sec` に加えて、`fit_type`、
 whichllm --top 20
 whichllm --quant Q4_K_M
 whichllm --min-speed 30
+whichllm --speed usable
+whichllm --speed fast
+whichllm --markdown
 whichllm --profile coding
 whichllm --context-length 64k
-whichllm --status
+whichllm --details
 whichllm --gpu-only
 
 # ベンチ根拠の厳しさ
@@ -140,8 +159,12 @@ whichllm hardware
 - `!sr`: アップローダー自己申告の評価値だけに基づくスコア
 - `?`: 利用できるベンチマーク根拠がないスコア
 
-`--status` の速度欄のマーカー:
+速度表示:
 
+- 赤: `4 tok/s` 未満の遅い生成速度
+- 黄: `4-10 tok/s` のぎりぎり使える生成速度
+- 緑: `10-30 tok/s` の実用的な生成速度
+- 明るい緑: `30 tok/s` 以上の高速なローカル生成速度
 - `~`: 速度推定の幅がある通常の推定値
 - `?`: backend や runtime の影響が大きい低信頼の推定値
 
@@ -159,7 +182,10 @@ whichllm hardware
 
 通常は full GPU、partial offload、CPU-only の候補をまとめて見ます。GPUの
 VRAMに全部載るモデルだけを見たい場合は `--gpu-only` か
-`--fit full-gpu` を使います。
+`--fit gpu` を使います。遅い候補を最初から除外したい場合は
+`--speed usable`、`--speed fast` を使います。
+それぞれ `10 tok/s`、`30 tok/s` が最低ラインです。
+もっと低いラインを指定したい場合は `--min-speed 4` のように数値で指定します。
 
 キャッシュは通常 `~/.cache/whichllm/` に保存されます。`XDG_CACHE_HOME` が
 絶対パスで設定されている場合は、その配下の `whichllm/` を使います。

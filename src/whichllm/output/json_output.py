@@ -21,6 +21,7 @@ def display_json(results: list[CompatibilityResult], hardware: HardwareInfo) -> 
                     "name": g.name,
                     "vendor": g.vendor,
                     "vram_bytes": g.vram_bytes,
+                    "usable_vram_bytes": g.usable_vram_bytes,
                     "memory_bandwidth_gbps": g.memory_bandwidth_gbps,
                     "shared_memory": g.shared_memory,
                 }
@@ -29,6 +30,8 @@ def display_json(results: list[CompatibilityResult], hardware: HardwareInfo) -> 
             "cpu": hardware.cpu_name,
             "cpu_cores": hardware.cpu_cores,
             "ram_bytes": hardware.ram_bytes,
+            "ram_budget_bytes": hardware.ram_budget_bytes,
+            "budget_notes": hardware.budget_notes,
             "os": hardware.os,
         },
         "models": [

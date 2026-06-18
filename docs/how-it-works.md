@@ -187,7 +187,7 @@ Output is split by surface:
 - `output/upgrade.py` renders upgrade comparison tables.
 - `output/display.py` re-exports those functions for older imports.
 
-Normal ranking tables show published date and downloads. With `--status`, the
-table instead shows memory required, estimated speed, and fit type. Speed cells
-use `~` for normal estimates with a range and `?` for low-confidence,
-backend-sensitive estimates.
+Normal ranking tables show memory required, estimated generation speed, fit
+type, and published date. `--details` switches to download-oriented metadata.
+Speed color is based on absolute usability, while `~` marks estimates with a
+range and `?` marks low-confidence, backend-sensitive estimates.

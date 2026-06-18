@@ -70,6 +70,59 @@ def test_partial_offload():
     assert any("offload" in w.lower() for w in result.warnings)
 
 
+def test_usable_vram_budget_can_turn_full_gpu_into_partial_offload():
+    model = _make_model()
+    variant = _make_variant(7_000_000_000)
+    hw = _make_hardware(vram=8 * _GiB, ram=64 * _GiB)
+    hw.gpus[0].usable_vram_bytes = 6 * _GiB
+
+    result = check_compatibility(model, variant, hw)
+
+    assert result.can_run is True
+    assert result.fit_type == "partial_offload"
+    assert result.vram_available_bytes == 6 * _GiB
+
+
+def test_ram_budget_limits_partial_offload_pool():
+    model = _make_model()
+    variant = _make_variant(20_000_000_000)
+    hw = _make_hardware(vram=8 * _GiB, ram=64 * _GiB)
+    hw.ram_budget_bytes = 4 * _GiB
+
+    result = check_compatibility(model, variant, hw)
+
+    assert result.can_run is False
+    assert "Insufficient memory" in result.warnings[-1]
+
+
+def test_ram_budget_caps_shared_memory_gpu_fit_pool():
+    model = _make_model()
+    variant = _make_variant(12_000_000_000)
+    hw = HardwareInfo(
+        gpus=[
+            GPUInfo(
+                name="Apple M2",
+                vendor="apple",
+                vram_bytes=16 * _GiB,
+                usable_vram_bytes=15 * _GiB,
+                memory_bandwidth_gbps=100.0,
+                shared_memory=True,
+            )
+        ],
+        cpu_name="Apple M2",
+        cpu_cores=8,
+        ram_bytes=16 * _GiB,
+        ram_budget_bytes=8 * _GiB,
+        disk_free_bytes=100 * _GiB,
+        os="darwin",
+    )
+
+    result = check_compatibility(model, variant, hw)
+
+    assert result.can_run is False
+    assert result.vram_available_bytes == 8 * _GiB
+
+
 def test_shared_memory_amd_apu_uses_system_memory_pool():
     model = _make_model(120_000_000_000)
     variant = _make_variant(55_000_000_000)
