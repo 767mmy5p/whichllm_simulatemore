@@ -18,25 +18,31 @@ Auto-detects your GPU/CPU/RAM and ranks the top models from HuggingFace that fit
 
 ## Quick start
 
-### Install and run
+### Install this fork
 
-Run the recommendation command once, with no project setup.
+Install directly from this GitHub repository to get the hardware simulation features:
 
 ```bash
-uvx whichllm@latest
+# Install as a tool (recommended)
+uv tool install git+https://github.com/Andyyyy64/whichllm.git
+uv tool upgrade whichllm  # update later
 ```
 
-Install it when you use it often.
+Or run once without installing:
 
 ```bash
-uv tool install whichllm
-uv tool upgrade whichllm  # update an existing install
+uvx git+https://github.com/Andyyyy64/whichllm.git
 ```
 
-Other install paths.
+Other installation paths:
 
 ```bash
-brew install andyyyy64/whichllm/whichllm
+# Development mode (clone first)
+git clone https://github.com/Andyyyy64/whichllm.git
+cd whichllm
+uv pip install -e .
+
+# Or from PyPI (main repo only, no simulation features)
 pip install whichllm
 ```
 
@@ -46,14 +52,16 @@ Test models on hypothetical hardware configurations before buying:
 
 ```bash
 # Simulate a specific GPU
-uvx whichllm@latest --gpu "RTX 4090"
+whichllm --gpu "RTX 4090"
 
-# Simulate a complete system
-uvx whichllm@latest --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
+# Simulate a complete system manually
+whichllm --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
 
 # Auto-fill sensible defaults with --suggest
-uvx whichllm@latest --cpu "Apple M4 Max" --suggest
-uvx whichllm@latest --ram "32GB" --suggest
+whichllm --cpu "Apple M4 Max" --suggest
+whichllm --ram "32GB" --suggest
+whichllm --disk "2TB" --suggest
+whichllm --os darwin --suggest
 ```
 
 ## Common workflows
