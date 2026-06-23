@@ -231,11 +231,6 @@ def create_synthetic_gpus(
 ) -> list[GPUInfo]:
     """Create one or more synthetic GPUs from CLI-style values."""
     names = parse_synthetic_gpu_specs(values)
-    if vram_override_gb is not None and len(names) != 1:
-        raise ValueError(
-            "--vram currently supports exactly one simulated GPU. "
-            "For multi-GPU simulation, specify known GPU names and omit --vram."
-        )
     return [create_synthetic_gpu(name, vram_override_gb) for name in names]
 
 

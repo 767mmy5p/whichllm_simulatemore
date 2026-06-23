@@ -5,14 +5,25 @@ __pycache__/
 *.pyo
 *.pyd
 
-# Build artifacts
-build/
-dist/
-*.egg-info/
+# Logs and temp files
+*.log
+*.tmp
 
-# Virtual environments
-venv/
-.venv/
+# Environment
 .env
 .env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
+
+# Coverage
+.coverage
+coverage/
+htmlcov/
+
+# Testing
+.pytest_cache/
+.mypy_cache/
 ```
