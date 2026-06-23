@@ -748,6 +748,11 @@ def plan(
     refresh: bool = typer.Option(
         False, "--refresh", help="Ignore cache and re-fetch models"
     ),
+    suggest: bool = typer.Option(
+        False,
+        "--suggest",
+        help="Auto-suggest hardware specs that can run the model at full GPU speed",
+    ),
 ):
     """Show what GPU you need to run a specific model."""
     from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -785,7 +790,7 @@ def plan(
         display_plan_json(model, context_length, target_quant)
     else:
         console.print()
-        display_plan(model, context_length, target_quant)
+        display_plan(model, context_length, target_quant, suggest=suggest)
         console.print()
 
 

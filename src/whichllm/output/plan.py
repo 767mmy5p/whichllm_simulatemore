@@ -14,8 +14,16 @@ def display_plan(
     model: ModelInfo,
     context_length: int,
     target_quant: str,
+    suggest: bool = False,
 ) -> None:
-    """Display hardware requirements for a specific model."""
+    """Display hardware requirements for a specific model.
+    
+    Args:
+        model: The model to display requirements for.
+        context_length: Context length for KV cache estimation.
+        target_quant: Target quantization level.
+        suggest: If True, auto-suggest hardware specs that can run the model at full GPU speed.
+    """
     from whichllm.constants import (
         GPU_BANDWIDTH,
         QUANT_BYTES_PER_WEIGHT,
@@ -23,6 +31,8 @@ def display_plan(
     )
     from whichllm.engine.performance import estimate_tok_per_sec
     from whichllm.engine.vram import estimate_vram
+    from whichllm.hardware.gpu_simulator import create_synthetic_gpu
+    from whichllm.hardware.system_simulator import create_synthetic_hardware
     from whichllm.hardware.types import GPUInfo
 
     _GiB = 1024**3
@@ -151,6 +161,37 @@ def display_plan(
             f"  [green]★[/] Minimum GPU for full offload: "
             f"[bold]{min_full_gpu[0]}[/] ({min_full_gpu[1]} GB) at {target_quant}"
         )
+        
+        # If --suggest flag is used, show a complete hardware suggestion
+        if suggest:
+            from whichllm.hardware.system_simulator import suggest_compatible_parts
+            
+            # Create a synthetic GPU with the minimum required VRAM
+            suggested_gpu = create_synthetic_gpu(min_full_gpu[0])
+            
+            # Get suggestions for compatible CPU, RAM, disk, and OS
+            suggestions = suggest_compatible_parts(
+                cpu=None,
+                ram=None,
+                disk=None,
+                os_name=None,
+                gpus=[suggested_gpu],
+            )
+            
+            _console.console.print()
+            _console.console.print(
+                Panel(
+                    f"[bold]Suggested Complete System:[/]\n\n"
+                    f"[cyan]GPU:[/] {min_full_gpu[0]} ({min_full_gpu[1]} GB)\n"
+                    f"[cyan]CPU:[/] {suggestions.get('cpu', 'i5-13600K')}\n"
+                    f"[cyan]RAM:[/] {suggestions.get('ram', '32GB')}\n"
+                    f"[cyan]Disk:[/] {suggestions.get('disk', '512GB')}\n"
+                    f"[cyan]OS:[/] {suggestions.get('os', 'linux')}\n\n"
+                    f"[dim]This configuration can run {model.id} at full GPU speed with {target_quant} quantization.[/]",
+                    title="[bold green]Hardware Recommendation[/]",
+                    border_style="green",
+                )
+            )
     else:
         _console.console.print(
             f"  [yellow]Note:[/] No single GPU can fully load this model at {target_quant}. "
