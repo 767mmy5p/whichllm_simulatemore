@@ -463,6 +463,36 @@ def main(
         "--ram-budget",
         help="RAM budget for offload: available | 8GB | 50%",
     ),
+    cpu: Optional[str] = typer.Option(
+        None,
+        "--cpu",
+        help="Simulate CPU model, e.g. 'i9-13900K', 'Ryzen 9 7950X'",
+    ),
+    cpu_cores: Optional[int] = typer.Option(
+        None,
+        "--cpu-cores",
+        help="Number of CPU cores for simulation (auto-detected if not provided)",
+    ),
+    ram: Optional[str] = typer.Option(
+        None,
+        "--ram",
+        help="Simulate RAM size, e.g. '32GB', '64', '16.5GB'",
+    ),
+    disk: Optional[str] = typer.Option(
+        None,
+        "--disk",
+        help="Simulate free disk space, e.g. '512GB', '1TB', '256'",
+    ),
+    os: Optional[str] = typer.Option(
+        None,
+        "--os",
+        help="Simulate OS: linux | darwin | windows",
+    ),
+    suggest: bool = typer.Option(
+        False,
+        "--suggest",
+        help="Auto-suggest compatible parts when used alongside other simulation flags",
+    ),
 ):
     """Detect hardware and recommend the best local LLMs."""
     if ctx.invoked_subcommand is not None:
@@ -479,6 +509,7 @@ def main(
 
     from whichllm.engine.ranker import rank_models
     from whichllm.hardware.detector import detect_hardware
+    from whichllm.hardware.system_simulator import create_synthetic_hardware
     from whichllm.models.benchmark import (
         fetch_benchmark_scores,
         load_benchmark_cache,
@@ -507,8 +538,65 @@ def main(
     ) as progress:
         # Step 1: Detect hardware
         task = progress.add_task("Detecting hardware...", total=None)
-        hardware = detect_hardware()
-        _apply_gpu_overrides(hardware, cpu_only, gpu, vram)
+        
+        # Check if any simulation flags are provided
+        has_simulation = any([
+            cpu is not None,
+            ram is not None,
+            disk is not None,
+            os is not None,
+        ])
+        
+        if has_simulation:
+            # Use synthetic hardware with simulated specs
+            from whichllm.hardware.gpu_simulator import create_synthetic_gpus
+            from whichllm.hardware.system_simulator import suggest_compatible_parts
+            
+            # First handle GPU simulation if requested
+            if gpu:
+                try:
+                    simulated_gpus = create_synthetic_gpus(gpu, vram)
+                except ValueError as e:
+                    console.print(f"[red]Error:[/] {e}")
+                    raise typer.Exit(code=1)
+            elif cpu_only:
+                simulated_gpus = []
+            else:
+                # Use detected GPUs if no GPU simulation specified
+                base_hw = detect_hardware()
+                simulated_gpus = base_hw.gpus
+            
+            # Auto-suggest compatible parts if --suggest flag is used
+            if suggest:
+                suggested = suggest_compatible_parts(
+                    cpu=cpu,
+                    ram=ram,
+                    disk=disk,
+                    os_name=os,
+                    gpus=simulated_gpus,
+                )
+                if suggested.get("cpu") and cpu is None:
+                    cpu = suggested["cpu"]
+                if suggested.get("ram") and ram is None:
+                    ram = suggested["ram"]
+                if suggested.get("disk") and disk is None:
+                    disk = suggested["disk"]
+                if suggested.get("os") and os is None:
+                    os = suggested["os"]
+            
+            hardware = create_synthetic_hardware(
+                cpu=cpu,
+                cpu_cores=cpu_cores,
+                ram=ram,
+                disk=disk,
+                os_name=os,
+                gpus=simulated_gpus,
+            )
+        else:
+            # Use normal hardware detection
+            hardware = detect_hardware()
+            _apply_gpu_overrides(hardware, cpu_only, gpu, vram)
+        
         _apply_memory_budgets(
             hardware, vram_headroom=vram_headroom, ram_budget=ram_budget
         )

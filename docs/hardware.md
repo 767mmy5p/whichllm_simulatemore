@@ -122,19 +122,44 @@ Physical core count comes from `psutil`, with a Linux `/proc/cpuinfo` fallback.
 RAM comes from `psutil.virtual_memory()`. Disk free space is checked under the
 user's home directory by default.
 
-## GPU simulation
+## Hardware simulation
 
-Use `--gpu` to simulate a GPU:
+Use `--gpu`, `--cpu`, `--ram`, `--disk`, and `--os` to simulate hardware:
 
 ```bash
 whichllm --gpu "RTX 4090"
+whichllm --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
+whichllm --cpu "Apple M4 Max" --suggest
 whichllm hardware --gpu "Apple M3 Max"
 whichllm upgrade "RTX 4090" "RTX 5090" "H100"
 ```
 
-Simulation uses the `dbgpu` package for a TechPowerUp-backed GPU database.
+Simulation uses the `dbgpu` package for a TechPowerUp-backed GPU database,
+plus curated handling for CPU names, RAM sizes, disk space, and OS types.
 whichllm adds extra handling for common aliases and Apple Silicon chips because
 those are not covered by dbgpu.
+
+### Smart suggestions with `--suggest`
+
+When `--suggest` is used alongside any simulation flag, whichllm automatically
+fills in sensible defaults for missing components:
+
+```bash
+# Specify CPU, get suggested RAM, disk, and OS
+whichllm --cpu "i9-13900K" --suggest
+
+# Specify RAM, get suggested CPU, disk, and OS
+whichllm --ram "32GB" --suggest
+
+# Mix with GPU simulation
+whichllm --gpu "RTX 4090" --cpu "i9-13900K" --suggest
+```
+
+Suggestion rules:
+- **OS detection**: Apple Silicon CPUs/GPUs → `darwin`, AMD/Intel → `linux`
+- **RAM suggestions**: Based on CPU tier (high-end → 64GB, mid → 32GB, entry → 8GB)
+- **Disk suggestions**: Based on RAM (≤8GB → 256GB, ≤32GB → 1TB, >32GB → 2TB)
+- **CPU suggestions**: If only `--os darwin` → "Apple M3", otherwise "i5-13600K"
 
 Use `--vram` when a GPU name is ambiguous, unknown, or has multiple variants:
 

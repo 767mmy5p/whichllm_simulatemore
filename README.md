@@ -24,10 +24,12 @@ Run the recommendation command once, with no project setup.
 uvx whichllm@latest
 ```
 
-Simulate a GPU before you buy hardware.
+Simulate hardware before you buy.
 
 ```bash
 uvx whichllm@latest --gpu "RTX 4090"
+uvx whichllm@latest --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
+uvx whichllm@latest --cpu "Apple M4 Max" --suggest
 ```
 
 Install it when you use it often.
@@ -53,8 +55,10 @@ with `uvx whichllm@latest`.
 # Best models for this machine
 whichllm
 
-# Pretend you have a specific GPU
+# Pretend you have specific hardware
 whichllm --gpu "RTX 4090"
+whichllm --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
+whichllm --cpu "Apple M4 Max" --suggest
 
 # Only show models that fit fully in GPU VRAM
 whichllm --gpu-only
@@ -117,7 +121,7 @@ data, this is not a static list):
 | Apple M3 Max | 36 GB | `Qwen3.6-27B` · Q5_K_M · score 89.4 | ~9 t/s |
 | CPU only | — | `gpt-oss-20b` (MoE) · Q4_K_M · score 45.2 | ~6 t/s |
 
-`whichllm --gpu "<your card>"` simulates any of these before you buy.
+`whichllm --gpu "<your card>"` or `whichllm --cpu "<CPU>" --ram "<RAM>"` simulates hardware before you buy.
 By default, rankings include full-GPU, partial-offload, and CPU-only
 candidates when they are usable. Use `--gpu-only` or `--fit full-gpu` when
 you only want models that fit entirely in GPU VRAM.
@@ -157,14 +161,15 @@ whichllm is built to get right.
 
 ## Features
 
-- **Auto-detect hardware** — NVIDIA, AMD, Intel, Apple Silicon, CPU-only
+- **Auto-detect hardware** — NVIDIA, AMD, Intel, Apple Silicon, CPU cores, RAM, disk
 - **Smart ranking** — Scores models by VRAM fit, speed, and benchmark quality
 - **One-command chat** — `whichllm run` downloads and starts a chat session instantly
 - **Code snippets** — `whichllm snippet` prints ready-to-run Python for any model
 - **Live data** — Fetches models directly from HuggingFace (cached for performance)
 - **Benchmark-aware** — Integrates real eval scores with confidence-based dampening
 - **Task profiles** — Filter by general, coding, vision, or math use cases
-- **GPU simulation** — Test with any GPU: `whichllm --gpu "RTX 4090"`
+- **Hardware simulation** — Test with any GPU/CPU/RAM/Disk/OS: `whichllm --gpu "RTX 4090" --cpu "i9-13900K" --ram "64GB"`
+- **Smart suggestions** — `--suggest` auto-fills sensible defaults for missing components
 - **Multi-GPU simulation** — Repeat `--gpu`, use commas, or write `2x RTX 4090`
 - **Full-GPU filter** — `--gpu-only` / `--fit full-gpu` hides offload candidates
 - **Speed-aware filtering** — `--speed usable|fast` hides slow rows by threshold
@@ -227,7 +232,7 @@ print(output["choices"][0]["message"]["content"])
 # Auto-detect hardware and show best models
 whichllm
 
-# Simulate a GPU (e.g. planning a purchase)
+# Simulate hardware (e.g. planning a purchase)
 whichllm --gpu "RTX 4090"
 whichllm --gpu "RTX 5090"
 # Specify variant
@@ -236,6 +241,11 @@ whichllm --gpu "RTX 5060 16"
 whichllm --gpu "2x RTX 4090"
 whichllm --gpu "RTX 4090" --gpu "RTX 3090"
 whichllm --gpu "RTX 4090, RTX 3090"
+
+# Simulate CPU, RAM, disk, and OS
+whichllm --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
+whichllm --cpu "Apple M4 Max" --suggest
+whichllm --ram "32GB" --suggest
 
 # Only show models that fit entirely in GPU VRAM
 whichllm --gpu-only
