@@ -545,6 +545,7 @@ def main(
             ram is not None,
             disk is not None,
             os is not None,
+            gpu is not None,
         ])
         
         if has_simulation:
