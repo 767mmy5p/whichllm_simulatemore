@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Optional
+
 from rich.panel import Panel
 from rich.table import Table
 
@@ -15,6 +17,7 @@ def display_plan(
     context_length: int,
     target_quant: str,
     suggest: bool = False,
+    hardware_info: Optional["HardwareInfo"] = None,
 ) -> None:
     """Display hardware requirements for a specific model.
     
@@ -23,6 +26,7 @@ def display_plan(
         context_length: Context length for KV cache estimation.
         target_quant: Target quantization level.
         suggest: If True, auto-suggest hardware specs that can run the model at full GPU speed.
+        hardware_info: Current hardware info to check compatibility.
     """
     from whichllm.constants import (
         GPU_BANDWIDTH,
@@ -33,7 +37,7 @@ def display_plan(
     from whichllm.engine.vram import estimate_vram
     from whichllm.hardware.gpu_simulator import create_synthetic_gpu
     from whichllm.hardware.system_simulator import create_synthetic_hardware
-    from whichllm.hardware.types import GPUInfo
+    from whichllm.hardware.types import GPUInfo, HardwareInfo
 
     _GiB = 1024**3
 
@@ -155,6 +159,36 @@ def display_plan(
         gpu_table.add_row(gpu_name, f"{vram_gb} GB", fit, speed_str)
 
     _console.console.print(gpu_table)
+
+    # Check current hardware compatibility if provided
+    if hardware_info is not None and min_full_gpu:
+        from whichllm.hardware.memory import effective_usable_ram
+        
+        total_vram = sum(g.vram_bytes for g in hardware_info.gpus) if hardware_info.gpus else 0
+        usable_ram = effective_usable_ram(hardware_info.ram_bytes, hardware_info.ram_budget_bytes)
+        
+        can_run_full_gpu = total_vram >= target_vram or (hardware_info.gpus and any(g.vram_bytes >= target_vram for g in hardware_info.gpus))
+        can_run_partial = total_vram >= target_vram * 0.4 or usable_ram >= target_vram
+        
+        if can_run_full_gpu:
+            gpu_names = ", ".join(g.name for g in hardware_info.gpus) if hardware_info.gpus else "GPU"
+            _console.console.print()
+            _console.console.print(
+                f"  [bold green]✓ Your hardware CAN run this model at full GPU speed![/]\n"
+                f"  [dim]Detected: {gpu_names} ({_format_bytes(total_vram)} total VRAM)[/]"
+            )
+        elif can_run_partial:
+            _console.console.print()
+            _console.console.print(
+                f"  [bold yellow]~ Your hardware can PARTIALLY run this model.[/]\n"
+                f"  [dim]Some layers will be offloaded to RAM ({_format_bytes(usable_ram)} available).[/]"
+            )
+        else:
+            _console.console.print()
+            _console.console.print(
+                f"  [bold red]✗ Your hardware CANNOT run this model efficiently.[/]\n"
+                f"  [dim]Need {_format_bytes(target_vram)} VRAM, but only {_format_bytes(total_vram)} available.[/]"
+            )
 
     if min_full_gpu:
         _console.console.print(

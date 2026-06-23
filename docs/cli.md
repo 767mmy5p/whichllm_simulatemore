@@ -131,7 +131,8 @@ whichllm plan MODEL_NAME [OPTIONS]
 ```
 
 Searches for a model by HuggingFace repo ID or fuzzy terms, then estimates the
-VRAM required for several quantization levels and common GPUs.
+VRAM required for several quantization levels and common GPUs. Also checks if
+your current hardware can run the model (enabled by default).
 
 Options:
 
@@ -141,6 +142,8 @@ Options:
 | `--quant`, `-q` | Target quantization. Default: `Q4_K_M` |
 | `--json` | Print the plan as JSON |
 | `--refresh` | Ignore model cache and fetch again |
+| `--suggest` | Auto-suggest complete hardware setup that can run the model at full GPU speed |
+| `--check-current` / `--no-check-current` | Check if your current hardware can run the model (default: enabled) |
 
 Examples:
 
@@ -149,6 +152,9 @@ whichllm plan "llama 3 70b"
 whichllm plan "Qwen2.5-72B" --quant Q8_0
 whichllm plan "mistral 7b" --context-length 32768
 whichllm plan "mistral 7b" --context-length 32k
+whichllm plan "Llama-3.2-1B" --suggest  # Auto-suggest complete hardware setup
+whichllm plan "Llama-3.1-8B" --check-current  # Check current hardware (default)
+whichllm plan "Llama-3.1-8B" --no-check-current  # Skip current hardware check
 ```
 
 ## `upgrade`

@@ -770,6 +770,11 @@ def plan(
         "--suggest",
         help="Auto-suggest hardware specs that can run the model at full GPU speed",
     ),
+    check_current: bool = typer.Option(
+        True,
+        "--check-current/--no-check-current",
+        help="Check if current hardware can run the model (default: enabled)",
+    ),
 ):
     """Show what GPU you need to run a specific model."""
     from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -803,11 +808,17 @@ def plan(
 
     target_quant = quant.upper() if quant else "Q4_K_M"
 
+    # Detect current hardware if checking compatibility
+    hardware_info = None
+    if check_current:
+        from whichllm.hardware.detector import detect_hardware
+        hardware_info = detect_hardware()
+
     if json_output:
         display_plan_json(model, context_length, target_quant)
     else:
         console.print()
-        display_plan(model, context_length, target_quant, suggest=suggest)
+        display_plan(model, context_length, target_quant, suggest=suggest, hardware_info=hardware_info)
         console.print()
 
 
