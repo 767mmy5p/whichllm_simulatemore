@@ -24,22 +24,22 @@ Install directly from this GitHub repository to get the hardware simulation feat
 
 ```bash
 # Install as a tool (recommended)
-uv tool install git+https://github.com/Andyyyy64/whichllm.git
+uv tool install git+https://github.com/767mmy5p/whichllm_simulatemore.git
 uv tool upgrade whichllm  # update later
 ```
 
 Or run once without installing:
 
 ```bash
-uvx git+https://github.com/Andyyyy64/whichllm.git
+uvx git+https://github.com/767mmy5p/whichllm_simulatemore.git
 ```
 
 Other installation paths:
 
 ```bash
 # Development mode (clone first)
-git clone https://github.com/Andyyyy64/whichllm.git
-cd whichllm
+git clone https://github.com/767mmy5p/whichllm_simulatemore.git
+cd whichllm_simulatemore
 uv pip install -e .
 
 # Or from PyPI (main repo only, no simulation features)
