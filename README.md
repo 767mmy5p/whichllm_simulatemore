@@ -315,6 +315,7 @@ whichllm hardware
 whichllm plan "llama 3 70b"
 whichllm plan "Qwen2.5-72B" --quant Q8_0
 whichllm plan "mistral 7b" --context-length 32768
+whichllm plan "Llama-3.2-1B" --suggest  # Auto-suggest complete hardware setup
 
 # Upgrade: compare your current machine against candidate GPUs
 whichllm upgrade "RTX 4090" "RTX 5090" "H100"
