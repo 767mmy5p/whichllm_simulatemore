@@ -18,18 +18,12 @@ Auto-detects your GPU/CPU/RAM and ranks the top models from HuggingFace that fit
 
 ## Quick start
 
+### Install and run
+
 Run the recommendation command once, with no project setup.
 
 ```bash
 uvx whichllm@latest
-```
-
-Simulate hardware before you buy.
-
-```bash
-uvx whichllm@latest --gpu "RTX 4090"
-uvx whichllm@latest --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
-uvx whichllm@latest --cpu "Apple M4 Max" --suggest
 ```
 
 Install it when you use it often.
@@ -46,6 +40,22 @@ brew install andyyyy64/whichllm/whichllm
 pip install whichllm
 ```
 
+### Simulate hardware
+
+Test models on hypothetical hardware configurations before buying:
+
+```bash
+# Simulate a specific GPU
+uvx whichllm@latest --gpu "RTX 4090"
+
+# Simulate a complete system
+uvx whichllm@latest --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
+
+# Auto-fill sensible defaults with --suggest
+uvx whichllm@latest --cpu "Apple M4 Max" --suggest
+uvx whichllm@latest --ram "32GB" --suggest
+```
+
 ## Common workflows
 
 After install, run `whichllm` directly. For one-off runs, replace `whichllm`
@@ -59,6 +69,7 @@ whichllm
 whichllm --gpu "RTX 4090"
 whichllm --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
 whichllm --cpu "Apple M4 Max" --suggest
+whichllm --ram "32GB" --suggest
 
 # Only show models that fit fully in GPU VRAM
 whichllm --gpu-only
@@ -121,7 +132,8 @@ data, this is not a static list):
 | Apple M3 Max | 36 GB | `Qwen3.6-27B` · Q5_K_M · score 89.4 | ~9 t/s |
 | CPU only | — | `gpt-oss-20b` (MoE) · Q4_K_M · score 45.2 | ~6 t/s |
 
-`whichllm --gpu "<your card>"` or `whichllm --cpu "<CPU>" --ram "<RAM>"` simulates hardware before you buy.
+`whichllm --gpu "<your card>"`, `whichllm --cpu "<CPU>" --ram "<RAM>"`, or
+`whichllm --cpu "<CPU>" --suggest` simulates hardware before you buy.
 By default, rankings include full-GPU, partial-offload, and CPU-only
 candidates when they are usable. Use `--gpu-only` or `--fit full-gpu` when
 you only want models that fit entirely in GPU VRAM.
@@ -246,6 +258,13 @@ whichllm --gpu "RTX 4090, RTX 3090"
 whichllm --cpu "i9-13900K" --ram "64GB" --disk "1TB" --os linux
 whichllm --cpu "Apple M4 Max" --suggest
 whichllm --ram "32GB" --suggest
+whichllm --disk "2TB" --suggest
+whichllm --os darwin --suggest
+
+# Auto-fill missing components with smart defaults
+# --suggest detects CPU/GPU families and suggests matching RAM, disk, and OS
+whichllm --cpu "Ryzen 9 7950X" --suggest
+whichllm --gpu "RTX 4090" --suggest
 
 # Only show models that fit entirely in GPU VRAM
 whichllm --gpu-only
