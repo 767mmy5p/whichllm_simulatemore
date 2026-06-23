@@ -56,7 +56,7 @@ def _print_version(value: bool) -> None:
 def _validate_gpu_flags(
     cpu_only: bool,
     gpu: list[str] | None,
-    vram: float | None,
+    vram: list[float] | None,
 ) -> None:
     """Validate mutual exclusivity of GPU-related flags."""
     if cpu_only and gpu:
@@ -64,6 +64,11 @@ def _validate_gpu_flags(
         raise typer.Exit(code=1)
     if vram is not None and not gpu:
         console.print("[red]Error:[/] --vram requires --gpu.")
+        raise typer.Exit(code=1)
+    if vram is not None and gpu is not None and len(vram) > len(gpu):
+        console.print(
+            "[red]Error:[/] Number of --vram values cannot exceed number of --gpu values."
+        )
         raise typer.Exit(code=1)
 
 
@@ -261,7 +266,7 @@ def _apply_gpu_overrides(
     hardware: HardwareInfo,
     cpu_only: bool,
     gpu: list[str] | None,
-    vram: float | None,
+    vram: list[float] | None,
 ) -> HardwareInfo:
     """Replace hardware.gpus based on CLI flags."""
     if cpu_only:
@@ -270,7 +275,17 @@ def _apply_gpu_overrides(
         from whichllm.hardware.gpu_simulator import create_synthetic_gpus
 
         try:
-            hardware.gpus = create_synthetic_gpus(gpu, vram)
+            # If vram is provided, pass individual values for each GPU
+            if vram is not None:
+                # Create GPUs with individual VRAM overrides
+                if len(vram) == 1 and len(gpu) > 1:
+                    # Apply same VRAM to all GPUs if only one value provided
+                    hardware.gpus = [create_synthetic_gpus([g], vram[0])[0] for g in gpu]
+                else:
+                    # Apply specific VRAM to each GPU
+                    hardware.gpus = [create_synthetic_gpus([g], v)[0] for g, v in zip(gpu, vram)]
+            else:
+                hardware.gpus = create_synthetic_gpus(gpu, None)
         except ValueError as e:
             console.print(f"[red]Error:[/] {e}")
             raise typer.Exit(code=1)
@@ -450,8 +465,8 @@ def main(
         "--gpu",
         help="Simulate GPU(s), e.g. 'RTX 4090', '2x RTX 4090', or repeat --gpu",
     ),
-    vram: Optional[float] = typer.Option(
-        None, "--vram", help="Override VRAM in GB (requires --gpu)"
+    vram: Optional[list[float]] = typer.Option(
+        None, "--vram", help="Override VRAM in GB for each GPU (can be repeated)"
     ),
     vram_headroom: str = typer.Option(
         "auto",
@@ -556,7 +571,9 @@ def main(
             # First handle GPU simulation if requested
             if gpu:
                 try:
-                    simulated_gpus = create_synthetic_gpus(gpu, vram)
+                    # Pass single VRAM value or first value if multiple provided
+                    vram_value = vram[0] if vram and len(vram) == 1 else None
+                    simulated_gpus = create_synthetic_gpus(gpu, vram_value)
                 except ValueError as e:
                     console.print(f"[red]Error:[/] {e}")
                     raise typer.Exit(code=1)
@@ -1438,8 +1455,8 @@ def hardware(
         "--gpu",
         help="Simulate GPU(s), e.g. 'RTX 4090', '2x RTX 4090', or repeat --gpu",
     ),
-    vram: Optional[float] = typer.Option(
-        None, "--vram", help="Override VRAM in GB (requires --gpu)"
+    vram: Optional[list[float]] = typer.Option(
+        None, "--vram", help="Override VRAM in GB for each GPU (can be repeated)"
     ),
 ):
     """Show detected hardware information only."""
